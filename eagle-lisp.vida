@@ -51,7 +51,7 @@ var Symbol = fun s {
 
 var atom = fun token {
 	if token.hasPrefix(`"`) and token.hasSuffix(`"`) {
-		ret token
+		ret token[1..(token.len() - 1)]
 	}
 	if token == "#f" {
 		ret false
