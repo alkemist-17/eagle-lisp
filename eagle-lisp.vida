@@ -1,0 +1,512 @@
+//
+// Eagle: A little tiny Lisp Interpreter
+//
+
+
+var text = load("std.text")
+var re = load("std.re")
+var exception = load("std.exception")
+
+
+
+var tokenize = fun s -> re::findAll(`[()]|"(?:\\.|[^"\\])*"|[^\s()]+`, s, -1)
+
+
+var symvt = { type = fun self -> "Symbol" }
+
+
+var Symbol = fun s {
+    // Listo of special forms
+	if s in ["if", "def", "lambda", "quote", "begin", "cond", "let", "else", "set!", "and", "or"] {
+		ret s
+	}
+	ret {symbol = s} =< symvt
+}
+
+
+var atom = fun token {
+	if token.hasPrefix(`"`) and token.hasSuffix(`"`) {
+		ret token
+	}
+	if token == "#f" {
+		ret false
+	}
+	if token == "#t" {
+		ret true
+	}
+	if token.match(`^\d+$`) {
+		ret token.toNum("int")
+	}
+	if token.match(`^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$`) {
+		ret token.toNum("float")
+	}
+	ret Symbol(token)
+}
+
+
+var rec readFrom = fun tokens {
+	if tokens.isEmpty() { ret error("unexpected eof while reading") }
+	var tok = tokens.remove(0)
+	if tok == "(" {
+		var L = []
+		while not (tokens[0].isNil()) and tokens[0] != ")" {
+			L.append(readFrom(tokens))
+		}
+		tokens.remove(0)
+		ret L
+	}
+
+	else if tok == ")" {
+		ret error("unexpected )")
+	}
+
+	else {
+		ret atom(tok)
+	}
+}
+
+
+var parse = fun program {
+    var tokens = tokenize(program)
+    var ast = []
+    
+    // Keep reading expressions until the token stream is empty
+    while not tokens.isEmpty() {
+        ast.append(readFrom(tokens))
+    }
+    
+    ret ast
+}
+
+
+var envt = {}
+
+
+envt.find = fun self, key {
+	if key.type() == "Symbol" {
+		var unwrapped = key.symbol
+		var val = self[unwrapped]
+		if not val.isNil() {
+			ret val
+		}
+		if self.outer {
+			ret self.outer.find(key)
+		}
+	}
+	ret error("symbol `%v` not found".format(key))
+}
+
+
+envt.update = fun self, obj {
+	for k, v in obj {
+		self.set(k, v)
+	}
+	ret self
+}
+
+
+// --- MATH (VARIADIC) ---
+envt["+"] = fun args... {
+    var sum = 0
+    for _, a in args { sum = sum + a }
+    ret sum
+}
+
+envt["*"] = fun args... {
+    var prod = 1
+    for _, a in args { prod = prod * a }
+    ret prod
+}
+
+envt["-"] = fun args... {
+    if args.isEmpty() { ret error("- requires at least 1 argument") }
+    if args.len() == 1 { ret -args[0] } // UNARY NEGATION!
+    
+    var res = args[0]
+    for i, a in args {
+        if i > 0 { res = res - a }
+    }
+    ret res
+}
+
+envt["/"] = fun args... {
+    if args.isEmpty() { ret error("/ requires at least 1 argument") }
+    if args.len() == 1 { ret 1.0 / args[0] } // UNARY RECIPROCAL!
+    
+    var res = args[0]
+    for i, a in args {
+        if i > 0 { res = res / a }
+    }
+    ret res
+}
+
+// COMPARISONS (CHAINING)
+envt["="] = fun args... {
+    if args.len() < 2 { ret error("= requires at least 2 arguments") }
+    var first = args[0]
+    for i, a in args {
+        if i > 0 and not (first == a) { ret false }
+    }
+    ret true
+}
+
+envt["<"] = fun args... {
+    if args.len() < 2 { ret error("< requires at least 2 arguments") }
+    for i in 0, (args.len() - 1) {
+        if not (args[i] < args[i + 1]) { ret false }
+    }
+    ret true
+}
+
+// You can copy the logic for >, <=, and >= exactly like `<`!
+envt[">"] = fun args... {
+    if args.len() < 2 { ret error("> requires at least 2 arguments") }
+    for i in 0, (args.len() - 1) {
+        if not (args[i] > args[i + 1]) { ret false }
+    }
+    ret true
+}
+
+// --- STRICTLY UNARY & BINARY ---
+envt["not"] = fun args... {
+    if args.len() != 1 { ret error("not requires exactly 1 argument") }
+    ret not args[0]
+}
+
+envt["%"] = fun args... {
+    if args.len() != 2 { ret error("% requires exactly 2 arguments") }
+    ret args[0] % args[1]
+}
+
+
+envt["puts"] = fun args... -> print(...args)
+
+
+
+// Searches the environment chain to update an EXISTING variable
+envt["set!"] = fun self, key, val {
+	if key.type() == "Symbol" {
+		var unwrapped = key.symbol
+		var curr_val = self[unwrapped]
+		// If the key exists in the current scope, update it
+		if not curr_val.isNil() {
+			self[unwrapped] = val
+			ret val
+		}
+		// Otherwise, search the outer lexical scopes
+		if self.outer {
+			ret self.outer["set!"](self.outer, key, val)
+		}
+	}
+	ret error("symbol `%v` not defined for set!".format(key))
+}
+
+// List Operations
+envt["car"] = fun args... -> args[0][0]
+envt["cdr"] = fun args... -> args[0][1..]
+envt["null?"] = fun args... -> args[0].isEmpty()
+
+envt["cons"] = fun args... {
+	var elem = args[0]
+	var lst = args[1]
+	var res = [elem]
+	for _, item in lst {
+		res.append(item)
+	}
+	ret res
+}
+
+envt["list"] = fun args... -> args
+
+
+// High order functions
+envt["map"] = fun args... {
+	var proc = args[0]
+	var lst = args[1]
+	var res = []
+	for _, item in lst {
+		res.append(proc(item))
+	}
+	ret res
+}
+
+envt["filter"] = fun args... {
+	var proc = args[0]
+	var lst = args[1]
+	var res = []
+	for _, item in lst {
+		if proc(item) {
+			res.append(item)
+		}
+	}
+	ret res
+}
+
+envt["apply"] = fun args... {
+	var proc = args[0]
+	var argList = args[1]
+	ret proc(...argList)
+}
+
+
+var Env = fun -> { outer } =< envt
+
+
+var makeGlobalEnv = fun -> Env().update(load("std.math"))
+
+
+var makeFnEnv = fun parms, args, outer {
+	var env = Env()
+	env.outer = outer
+	var zipped = {}
+	for i, v in parms {
+		if v.type() == "Symbol" {
+			zipped[v.symbol] = args[i]
+		} else {
+			zipped[v] = args[i]			
+		}
+	}
+	env.update(zipped)
+	ret env
+}
+
+
+var rec eval = fun code, env {
+	if code.type() == "Symbol" {
+		ret env.find(code)
+	}
+
+
+	else if code.type() != "array" {
+		ret code
+	}
+
+
+    // Safety check for empty lists
+	else if code.isEmpty() {
+		ret nil
+	}
+
+
+	else if code[0] == "quote" {
+        // Returns the unevaluated expression
+		ret code[1]
+	}
+
+
+	else if code[0] == "begin" {
+        // Evaluates expressions in order, returns the last one
+		var res = nil
+		for _, e in code[1..] {
+			res = eval(e, env)
+		}
+		ret res
+	}
+
+
+	else if code[0] == "cond" {
+        // Evaluates conditions in order. If one is true, evaluates its body.
+		for _, clause in code[1..] {
+			var test_expr = clause[0]
+            
+            // Check for the explicit 'else' keyword
+			if test_expr == "else" {
+				var res = nil
+				for _, expr in clause[1..] {
+					res = eval(expr, env)
+				}
+				ret res
+			}
+            
+            // Otherwise, evaluate the condition
+			var test_val = eval(test_expr, env)
+			if test_val {
+				var res = nil
+				for _, expr in clause[1..] {
+					res = eval(expr, env)
+				}
+				ret res
+			}
+		}
+		ret nil
+	}
+
+
+	else if code[0] == "let" {
+        // Creates a new scope with local bindings
+		var bindings = code[1]
+		var new_env = Env()
+		new_env.outer = env
+		
+		for _, binding in bindings {
+			var var_name = binding[0]
+			// Evaluate values in the OUTER env
+			var var_val = eval(binding[1], env) 
+			
+			if var_name.type() == "Symbol" {
+				new_env[var_name.symbol] = var_val
+			} else {
+				new_env[var_name] = var_val
+			}
+		}
+		
+		var res = nil
+		for _, expr in code[2..] {
+			res = eval(expr, new_env)
+		}
+		ret res
+	}
+
+    
+	else if code[0] == "lambda" {
+        // Now supports multiple expressions in the body!
+		ret fun args... {
+			var fn_env = makeFnEnv(code[1], args, env)
+			var res = nil
+			for _, e in code[2..] {
+				res = eval(e, fn_env)
+			}
+			ret res
+		}
+	}
+
+
+	else if code[0] == "def" {
+		env[code[1].symbol] = eval(code[2], env)
+		ret env[code[1].symbol]
+	}
+
+
+	else if code[0] == "if" {
+		var exp = nil
+		if eval(code[1], env) {
+			exp = code[2]
+		} else {
+			exp = code[3]
+		}
+		ret eval(exp, env)
+	}
+
+
+	else if code[0] == "set!" {
+		var key = code[1]
+		var val = eval(code[2], env)
+		env["set!"](env, key, val)
+		ret val
+	}
+
+
+	else if code[0] == "and" {
+		var res = true
+		for _, e in code[1..] {
+			res = eval(e, env)
+			if not res { ret false } // Short-circuits!
+		}
+		ret res
+	}
+
+	
+	else if code[0] == "or" {
+		var res = false
+		for _, e in code[1..] {
+			res = eval(e, env)
+			if res { ret res } // Short-circuits!
+		}
+		ret false
+	}
+
+
+	else {
+		var proc = eval(code[0], env)
+		
+		if proc.isError() {
+			ret proc
+		}
+		
+		if proc.type() == "function" or proc.type() == "nativeFunction" {
+			var vals = []
+			for _, e in code[1..] {
+				vals.append(eval(e, env))
+			}
+			ret proc(...vals)
+		}
+		
+		ret error("value `%v` is not a lambda expression".format(code[0]))
+	}
+}
+
+
+var repl = fun prompt {
+	print("Welcome to the Eagle-Lisp (🦅) repl!\nType 'exit()' to quit.")
+	var env = makeGlobalEnv()
+	var running = true
+	while running {
+		var userInput = input(prompt)
+
+		if userInput.trim().toLower() in ["exit()", "exit", "quit"] {
+			running = false
+			print("Eagle-Lisp (🦅) says: Farewell!")
+			continue
+		}
+
+		// Check if the input is just whitespace
+		if userInput.trim().isEmpty() {
+			continue
+		}
+
+		// Parse into a list of expressions
+		var ast = parse(userInput)
+        
+        // Evaluate and print the result of each expression
+		for _, expr in ast {
+			print(eval(expr, env))
+		}
+	}
+}
+
+
+var prompt = "Eagle-Lisp (🦅) > "
+
+
+repl(prompt)
+
+
+
+// Some exercises here ...
+
+// (def factorial (lambda (n) (if (= n 0) 1 (* n (factorial (- n 1)))))) (factorial 5) (factorial 10)
+
+// (def fib (lambda (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))) (fib 10) (fib 15)
+
+// (def classify (lambda (x) (cond ((< x 0) "Negative") ((= x 0) "Zero") (else "Positive")))) (puts (classify 5))
+
+// (let ((x 10) (y 20)) (puts "x is" x "and y is" y) (+ x y))
+
+// (def make-counter (lambda () (let ((count 0)) (lambda () (set! count (+ count 1)) count))))
+
+// (def c1 (make-counter)) (def c2 (make-counter))
+
+// (puts "C1:" (c1) (c1) (c1)) (puts "C2:" (c2) (c2))
+
+// (def my-list (list 1 2 3 4 5))
+
+// (puts "First element:" (car my-list)) (puts "The rest:" (cdr my-list)) (puts "Prepend a zero:" (cons 0 my-list))
+
+// (def my-list (list 1 2 3 4 5))
+
+// (def double (lambda (x) (* x 2))) (puts "Doubled:" (map double my-list))
+
+// (def is-even? (lambda (x) (= (% x 2) 0))) (puts "Evens only:" (filter is-even? my-list))
+
+// (def add-three (lambda (a b c) (+ a (+ b c)))) (puts "Applied:" (apply add-three (list 10 20 30)))
+
+// (puts "Empty sum:" (+)) (puts "Empty product:" (*))
+
+// ;; Unary Inverses (puts "Negative 5:" (- 5)) (puts "Reciprocal of 4:" (/ 4))
+
+// ;; Chaining Comparisons (puts "Is 1 < 2 < 3?" (< 1 2 3)) (puts "Is 5 = 5 = 5?" (= 5 5 5))
+
+// ;; Variadic Math (puts "Sum:" (+ 1 2 3 4 5)) (puts "Left-associative sub:" (- 100 10 5 2)) 
+
+
+
