@@ -132,7 +132,7 @@ envt["*"] = fun args... {
 }
 
 envt["-"] = fun args... {
-    if args.isEmpty() { ret error("- requires at least 1 argument") }
+    if args.isEmpty() { ret error("lambda '-' requires at least 1 argument") }
     if args.len() == 1 { ret -args[0] } // UNARY NEGATION!
     
     var res = args[0]
@@ -143,7 +143,7 @@ envt["-"] = fun args... {
 }
 
 envt["/"] = fun args... {
-    if args.isEmpty() { ret error("/ requires at least 1 argument") }
+    if args.isEmpty() { ret error("lambda '/' requires at least 1 argument") }
     if args.len() == 1 { ret 1.0 / args[0] } // UNARY RECIPROCAL!
     
     var res = args[0]
@@ -155,7 +155,7 @@ envt["/"] = fun args... {
 
 // COMPARISONS (CHAINING)
 envt["="] = fun args... {
-    if args.len() < 2 { ret error("= requires at least 2 arguments") }
+    if args.len() < 2 { ret error("lambda '=' requires at least 2 arguments") }
     var first = args[0]
     for i, a in args {
         if i > 0 and not (first == a) { ret false }
@@ -164,35 +164,50 @@ envt["="] = fun args... {
 }
 
 envt["<"] = fun args... {
-    if args.len() < 2 { ret error("< requires at least 2 arguments") }
+    if args.len() < 2 { ret error("lambda '<' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
         if not (args[i] < args[i + 1]) { ret false }
     }
     ret true
 }
 
-// You can copy the logic for >, <=, and >= exactly like `<`!
+envt["<="] = fun args... {
+    if args.len() < 2 { ret error("lambda '<=' requires at least 2 arguments") }
+    for i in 0, (args.len() - 1) {
+        if not (args[i] <= args[i + 1]) { ret false }
+    }
+    ret true
+}
+
 envt[">"] = fun args... {
-    if args.len() < 2 { ret error("> requires at least 2 arguments") }
+    if args.len() < 2 { ret error("lambda '>' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
         if not (args[i] > args[i + 1]) { ret false }
     }
     ret true
 }
 
+envt[">="] = fun args... {
+    if args.len() < 2 { ret error("lambda '>=' requires at least 2 arguments") }
+    for i in 0, (args.len() - 1) {
+        if not (args[i] >= args[i + 1]) { ret false }
+    }
+    ret true
+}
+
 // --- STRICTLY UNARY & BINARY ---
 envt["not"] = fun args... {
-    if args.len() != 1 { ret error("not requires exactly 1 argument") }
+    if args.len() != 1 { ret error("lambda 'not' requires exactly 1 argument") }
     ret not args[0]
 }
 
 envt["%"] = fun args... {
-    if args.len() != 2 { ret error("% requires exactly 2 arguments") }
+    if args.len() != 2 { ret error("lambda '%' requires exactly 2 arguments") }
     ret args[0] % args[1]
 }
 
 
-envt["puts"] = fun args... -> print(...args)
+envt["puts"] = fun args... { print(); print(...args); ret "" }
 
 
 envt[".clear"] = fun args... { clearScreen(); ret "" }
@@ -217,12 +232,13 @@ envt["set!"] = fun self, key, val {
 	ret error("symbol `%v` not defined for set!".format(key))
 }
 
-// List Operations
+// Classic and basic list Operations
 envt["car"] = fun args... -> args[0][0]
 envt["cdr"] = fun args... -> args[0][1..]
 envt["null?"] = fun args... -> args[0].isEmpty()
 
 envt["cons"] = fun args... {
+	if args.len() < 2 { ret error("lambda 'cons' requires two arguments") }
 	var elem = args[0]
 	var lst = args[1]
 	var res = [elem]
@@ -237,6 +253,7 @@ envt["list"] = fun args... -> args
 
 // High order functions
 envt["map"] = fun args... {
+	if args.len() < 2 { ret error("lambda 'map' requires two arguments") }
 	var proc = args[0]
 	var lst = args[1]
 	var res = []
@@ -247,6 +264,7 @@ envt["map"] = fun args... {
 }
 
 envt["filter"] = fun args... {
+	if args.len() < 2 { ret error("lambda 'filter' requires two arguments") }
 	var proc = args[0]
 	var lst = args[1]
 	var res = []
@@ -259,6 +277,7 @@ envt["filter"] = fun args... {
 }
 
 envt["apply"] = fun args... {
+	if args.len() < 2 { ret error("lambda 'apply' requires two arguments") }
 	var proc = args[0]
 	var argList = args[1]
 	ret proc(...argList)
@@ -476,7 +495,7 @@ var repl = fun prompt {
         
         // Evaluate and print the result of each expression
 		for _, expr in ast {
-			print(eval(expr, env))
+			print("\n", eval(expr, env), "\n")
 		}
 	}
 }
