@@ -6,7 +6,20 @@
 var text = load("std.text")
 var re = load("std.re")
 var exception = load("std.exception")
+var os = load("std.os")
 
+
+
+
+
+var clearScreen = fun {
+	var osName = os::name()
+	if osName == "windows" { 
+		os::run("cmd", "/C", "cls")
+	} else {
+		os::run("clear")
+	}
+}
 
 
 var tokenize = fun s -> re::findAll(`[()]|"(?:\\.|[^"\\])*"|[^\s()]+`, s, -1)
@@ -180,6 +193,9 @@ envt["%"] = fun args... {
 
 
 envt["puts"] = fun args... -> print(...args)
+
+
+envt[".clear"] = fun args... { clearScreen(); ret "" }
 
 
 
@@ -437,6 +453,7 @@ var rec eval = fun code, env {
 
 
 var repl = fun prompt {
+	clearScreen()
 	print("Welcome to the Eagle-Lisp (🦅) repl!\nType 'exit()' to quit.")
 	var env = makeGlobalEnv()
 	var running = true
