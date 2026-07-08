@@ -22,7 +22,19 @@ var clearScreen = fun {
 }
 
 
-var tokenize = fun s -> re::findAll(`[()]|"(?:\\.|[^"\\])*"|[^\s()]+`, s, -1)
+var tokenize = fun s {
+    var rawTokens = re::findAll(`[()]|"(?:\\.|[^"\\])*"|;[^\n]*|[^\s()]+`, s, -1)
+    
+    var tokens = []
+    for _, t in rawTokens {
+        // Filter out the comments before returning the final token array
+        if not t.hasPrefix(";") {
+            tokens.append(t)
+        }
+    }
+    
+    ret tokens
+}
 
 
 var symvt = { type = fun self -> "Symbol" }
@@ -542,7 +554,9 @@ repl(prompt)
 
 // ;; Chaining Comparisons (puts "Is 1 < 2 < 3?" (< 1 2 3)) (puts "Is 5 = 5 = 5?" (= 5 5 5))
 
-// ;; Variadic Math (puts "Sum:" (+ 1 2 3 4 5)) (puts "Left-associative sub:" (- 100 10 5 2)) 
+// ;; Variadic Math (puts "Sum:" (+ 1 2 3 4 5)) (puts "Left-associative sub:" (- 100 10 5 2))
+
+// (def pythagoras (lambda (a b) ;; Calculate the squares (def a2 (* a a)) (def b2 (* b b)) ;; Return the sum (+ a2 b2))) ;; This is an inline comment! ;; Let's test it with a string that has a semicolon inside (puts "Result; is:" (pythagoras 3 4))
 
 
 
