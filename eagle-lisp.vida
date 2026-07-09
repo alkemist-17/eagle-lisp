@@ -226,6 +226,95 @@ envt["puts"] = fun args... { print("\n"); print(...args); ret "" }
 envt[".clear"] = fun args... { clearScreen(); ret "" }
 
 
+// Bridge from Vida to the eagle-lisp stdlib
+envt["string-length"] = fun args... {
+	if not args.isEmpty() {
+		if args[0].type() == "string" {
+			ret args[0].len()
+		}
+	}
+	ret error("lambda 'string-length' receives values of type string only")
+}
+
+
+envt["substring"] = fun args... {
+	if not args.isEmpty() and args.len() == 3 {
+		if 	args[0].type() == "string" and 
+			args[1].type() == "int" and 
+			args[2].type() == "int" {
+			ret args[0][args[1]..args[2]]
+		}
+	}
+	ret error("lambda 'substring' receives values of type string int int")
+}
+
+
+envt["string-join"] = fun args... {
+	if not args.isEmpty() and args.len() == 2 {
+		if 	args[0].type() == "string" and 
+			args[1].type() == "array" {
+			ret args[0].join(args[1])
+		}
+	}
+	ret error("lambda 'string-join' receives values of type string list")
+}
+
+
+envt["to-string"] = fun args... {
+	if not args.isEmpty() and args.len() == 1 {
+		ret format("%v", args[0])
+	}
+	ret error("lambda 'to-string' receives one argument")
+}
+
+
+envt["dict-new"] = fun args... -> {}
+
+
+envt["dict-set"] = fun args... {
+	if not args.isEmpty() and args.len() == 3 {
+		if 	args[0].type() == "object" and 
+			args[1].type() == "string" {
+			args[0][args[1]] = args[2]
+			ret args[0]
+		}
+	}
+	ret error("lambda 'dict-set' receives values of type dict string value")
+}
+
+
+envt["dict-get"] = fun args... {
+	if not args.isEmpty() and args.len() == 2 {
+		if 	args[0].type() == "object" and 
+			args[1].type() == "string" {
+			ret args[0][args[1]]
+		}
+	}
+	ret error("lambda 'dict-get' receives values of type object string")
+}
+
+
+envt["dict-keys"] = fun args... {
+	if not args.isEmpty() and args.len() == 1 {
+		ret args[0].keys()
+	}
+	ret error("lambda 'dict-keys' receives one value of type object")
+}
+
+
+envt["list-append"] = fun args... {
+	if not args.isEmpty() and args.len() == 2 {
+		if 	args[0].type() == "array" {
+			var res = []
+    		for _, item in args[0] { res.append(item) }
+    		res.append(args[1])
+    		ret res
+		}
+	}
+	ret error("lambda 'list-append' receives values of type list value")
+}
+
+
 
 // Searches the environment chain to update an EXISTING variable
 envt["set!"] = fun self, key, val {
