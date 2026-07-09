@@ -594,7 +594,7 @@ var rec eval = fun code, env {
 
 var repl = fun prompt {
 	clearScreen()
-	print("Welcome to the Eagle-Lisp (🦅) repl!\nType 'exit()' to quit.")
+	print("\n\n\nWelcome to the Eagle Lisp (🦅) repl!\nType 'exit()' to quit.\n\n\n")
 	var env = makeGlobalEnv()
 	var running = true
 	while running {
@@ -602,7 +602,8 @@ var repl = fun prompt {
 
 		if userInput.trim().toLower() in ["exit()", "exit", "quit"] {
 			running = false
-			print("Eagle-Lisp (🦅) says: Farewell!")
+			clearScreen()
+			print("\n\n\neagle-lisp (🦅) says: Farewell!\n\n\n")
 			continue
 		}
 
