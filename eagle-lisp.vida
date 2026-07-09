@@ -42,7 +42,7 @@ var symvt = { type = fun self -> "Symbol" }
 
 var Symbol = fun s {
     // Listo of special forms
-	if s in ["if", "def", "lambda", "quote", "begin", "cond", "let", "else", "set!", "and", "or"] {
+	if s in ["if", "def", "lambda", "quote", "begin", "cond", "let", "else", "set!", "and", "or", "load"] {
 		ret s
 	}
 	ret {symbol = s} =< symvt
@@ -460,6 +460,26 @@ var rec eval = fun code, env {
 			if res { ret res } // Short-circuits!
 		}
 		ret false
+	}
+
+	else if code[0] == "load" {
+		var path = eval(code[1], env)
+		var io = load("std.io")
+		var sourceCode = nil
+		
+		if io::exists(path) {
+			sourceCode = io::readFile(path)
+		} else {
+			ret error("source file '%v' does not exist".format(path))
+		}
+		
+		var asts = parse(sourceCode)
+		var res = nil
+		for _, expr in asts {
+			res = eval(expr, env)
+		}
+		
+		ret res
 	}
 
 
