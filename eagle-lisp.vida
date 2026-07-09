@@ -513,7 +513,7 @@ var repl = fun prompt {
 }
 
 
-var prompt = "Eagle-Lisp (🦅) > "
+var prompt = "eagle-lisp (🦅) > "
 
 
 repl(prompt)
