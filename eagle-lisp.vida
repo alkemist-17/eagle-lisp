@@ -7,6 +7,7 @@ var text = load("std.text")
 var re = load("std.re")
 var exception = load("std.exception")
 var os = load("std.os")
+var io = load("std.io")
 
 
 
@@ -219,7 +220,7 @@ envt["%"] = fun args... {
 }
 
 
-envt["puts"] = fun args... { print(); print(...args); ret "" }
+envt["puts"] = fun args... { print("\n"); print(...args); ret "" }
 
 
 envt[".clear"] = fun args... { clearScreen(); ret "" }
@@ -464,7 +465,6 @@ var rec eval = fun code, env {
 
 	else if code[0] == "load" {
 		var path = eval(code[1], env)
-		var io = load("std.io")
 		var sourceCode = nil
 		
 		if io::exists(path) {
@@ -527,7 +527,7 @@ var repl = fun prompt {
         
         // Evaluate and print the result of each expression
 		for _, expr in ast {
-			print("\n", eval(expr, env), "\n")
+			print("\n\n%v\n\n".format(eval(expr, env)))
 		}
 	}
 }
