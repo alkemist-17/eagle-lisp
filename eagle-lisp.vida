@@ -697,23 +697,15 @@ let makeGlobalEnv = fun -> Env().update(load("std.math")).update(prelude)
 
 // Function Environment constructor
 let makeFnEnv = fun parms, args, outer {
-	/*
 	var env = Env()
 	env.outer = outer
-	var zipped = {}
-	for i, v in parms {
-		if v.type() == symbolType {
-			zipped[v.symbol] = args[i]
-		} else {
-			zipped[v] = args[i]			
-		}
-	}
-	env.update(zipped)
-	ret env
-	*/
 
-	var env = Env()
-	env.outer = outer
+
+	if parms.type() == symbolType {
+		env.set(parms.symbol, args)
+		ret env
+	}
+	
 	
 	var i = 0
 	var foundDot = false
