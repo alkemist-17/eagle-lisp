@@ -9,6 +9,11 @@ var exception = load("std.exception")
 var os = load("std.os")
 var io = load("std.io")
 var symbolType = "Symbol"
+var arrayType = "array"
+var strType = "string"
+var objType = "object"
+var intType = "int"
+var floatType = "float"
 
 
 
@@ -65,10 +70,10 @@ var atom = fun token {
 		ret true
 	}
 	if token.match(`^\d+$`) {
-		ret token.toNum("int")
+		ret token.toNum(intType)
 	}
 	if token.match(`^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:[eE][+-]?\d+)?$`) {
-		ret token.toNum("float")
+		ret token.toNum(floatType)
 	}
 	ret Symbol(token)
 }
@@ -184,7 +189,7 @@ envt["/"] = fun args... {
 
 
 // Comparison operations
-envt["="] = fun args... {
+envt["eq"] = fun args... {
     if args.len() < 2 { ret error("lambda '=' requires at least 2 arguments") }
     var first = args[0]
     for i, a in args {
@@ -235,6 +240,16 @@ envt[">="] = fun args... {
 
 
 
+// String operations
+envt["++"] = fun args... {
+	// This is not an efficient functionality
+    var acc = ""
+    for _, a in args { acc = acc + a.toString() }
+    ret acc
+}
+
+
+
 // prefix operator
 envt["not"] = fun args... {
     if args.len() != 1 { ret error("lambda 'not' requires exactly 1 argument") }
@@ -264,7 +279,7 @@ envt[".clear"] = fun args... { clearScreen(); ret "" }
 // This is just examples and they are not intended to be complete
 envt["string-length"] = fun args... {
 	if not args.isEmpty() {
-		if args[0].type() == "string" {
+		if args[0].type() == strType {
 			ret args[0].len()
 		}
 	}
@@ -275,9 +290,9 @@ envt["string-length"] = fun args... {
 
 envt["substring"] = fun args... {
 	if not args.isEmpty() and args.len() == 3 {
-		if 	args[0].type() == "string" and 
-			args[1].type() == "int" and 
-			args[2].type() == "int" {
+		if 	args[0].type() == strType and 
+			args[1].type() == intType and 
+			args[2].type() == intType {
 			ret args[0][args[1]..args[2]]
 		}
 	}
@@ -288,8 +303,8 @@ envt["substring"] = fun args... {
 
 envt["string-join"] = fun args... {
 	if not args.isEmpty() and args.len() == 2 {
-		if 	args[0].type() == "string" and 
-			args[1].type() == "array" {
+		if 	args[0].type() == strType and 
+			args[1].type() == arrayType {
 			ret args[0].join(args[1])
 		}
 	}
@@ -313,8 +328,8 @@ envt["dict-new"] = fun args... -> {}
 
 envt["dict-set"] = fun args... {
 	if not args.isEmpty() and args.len() == 3 {
-		if 	args[0].type() == "object" and 
-			args[1].type() == "string" {
+		if 	args[0].type() == objType and 
+			args[1].type() == strType {
 			args[0][args[1]] = args[2]
 			ret args[0]
 		}
@@ -326,8 +341,8 @@ envt["dict-set"] = fun args... {
 
 envt["dict-get"] = fun args... {
 	if not args.isEmpty() and args.len() == 2 {
-		if 	args[0].type() == "object" and 
-			args[1].type() == "string" {
+		if 	args[0].type() == objType and 
+			args[1].type() == strType {
 			ret args[0][args[1]]
 		}
 	}
@@ -345,9 +360,18 @@ envt["dict-keys"] = fun args... {
 
 
 
+envt["dict-clear"] = fun args... {
+	if not args.isEmpty() and args.len() == 1 {
+		ret {}
+	}
+	ret error("lambda 'dict-clear' receives one value of type object")
+}
+
+
+
 envt["list-append"] = fun args... {
 	if not args.isEmpty() and args.len() == 2 {
-		if 	args[0].type() == "array" {
+		if 	args[0].type() == arrayType {
 			var res = []
     		for _, item in args[0] { res.append(item) }
     		res.append(args[1])
@@ -361,7 +385,7 @@ envt["list-append"] = fun args... {
 
 // Searches the environment chain to update an EXISTING variable
 envt["set!"] = fun self, key, val {
-	if key.type() == "Symbol" {
+	if key.type() == symbolType {
 		var unwrapped = key.symbol
 		var curr_val = self[unwrapped]
 		// If the key exists in the current scope, update it
@@ -476,7 +500,7 @@ var rec eval = fun code, env {
 	}
 
 
-	else if code.type() != "array" {
+	else if code.type() != arrayType {
 		ret code
 	}
 
@@ -542,7 +566,7 @@ var rec eval = fun code, env {
 			// Evaluate values in the OUTER env
 			var var_val = eval(binding[1], env) 
 			
-			if var_name.type() == "Symbol" {
+			if var_name.type() == symbolType {
 				new_env[var_name.symbol] = var_val
 			} else {
 				new_env[var_name] = var_val
@@ -664,7 +688,7 @@ var repl = fun prompt {
 	while running {
 		var userInput = input(prompt)
 
-		if userInput.trim().toLower() in ["exit()", "exit", "quit"] {
+		if userInput.trim().toLower() in ["exit", "quit", "(exit)", "(quit)"] {
 			running = false
 			clearScreen()
 			print("\n\n\neagle-lisp (🦅) says: Farewell!\n\n\n")

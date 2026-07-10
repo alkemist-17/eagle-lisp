@@ -1,8 +1,8 @@
-;; ==========================================
+;; =============================================
 ;; 🦅 EAGLE-LISP STANDARD LIBRARY (stdlib.lisp)
-;; ==========================================
+;; =============================================
 
-;; --- STRING UTILITIES ---
+;; Some string stuff for fun
 
 ;; Reverses a string using pure Lisp recursion!
 (def string-reverse
@@ -23,17 +23,20 @@
     (= s (string-reverse s))))
 
 
-;; --- DATA STRUCTURES: STACK ---
-;; Stacks are easy because 'cons' prepends to the front of our lists!
+;; STACK
+;; Pure functional
 (def stack-new (lambda () (list)))
 (def stack-push (lambda (s item) (cons item s)))
 (def stack-pop (lambda (s) (car s)))
 (def stack-rest (lambda (s) (cdr s)))
 
 
-;; --- DATA STRUCTURES: QUEUE ---
+;; QUEUE
+;; Pure functional
 ;; Queues are FIFO (First In, First Out). We append to the back, and pop from the front.
-(def queue-new (lambda () (list)))
+(def queue-new 
+  (lambda () 
+    (list)))
 
 (def queue-enqueue
   (lambda (q item)
@@ -48,7 +51,7 @@
     (cdr q))) ;; Returns the queue without the oldest item
 
 
-;; --- MATH UTILITIES ---
+;; Some maths
 (def abs
   (lambda (n)
     (if (< n 0) (- n) n)))
@@ -60,5 +63,6 @@
 (def min
   (lambda (a b)
     (if (< a b) a b)))
+
 
 (puts "🦅 Standard Library loaded successfully!")
