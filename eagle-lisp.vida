@@ -12,6 +12,7 @@ let exception = load("std.exception")
 let os = load("std.os")
 let io = load("std.io")
 let symbolType = "Symbol"
+let nilType = "Nil"
 let macroType = "Macro"
 let arrayType = [].type()
 let strType = "".type()
@@ -34,8 +35,26 @@ let specialForms = [
 	"and", 
 	"or", 
 	"load",
+	"nil",
+	"print-env"
 ]
 let prompt = "> "
+
+
+
+
+
+// lisp nil
+let nilvt = {
+	type = fun self -> nilType
+	toString = fun self -> "nil"
+}
+
+
+
+
+
+let NIL = {} =< nilvt
 
 
 
@@ -46,6 +65,18 @@ let clearScreen = fun {
 		os::run("cmd", "/C", "cls") 
 	}
 	os::run("clear")
+}
+
+
+
+
+let showEnv = fun env {
+	var current = env
+	while current {
+		print(current)
+		current = current.outer
+	}
+	ret NIL
 }
 
 
@@ -101,6 +132,8 @@ let Macro = fun macroFn -> { macroFn = macroFn } =< macrovt
 
 
 let atom = fun token {
+	if token == "nil" { ret NIL }
+
 	if token.hasPrefix(`"`) and token.hasSuffix(`"`) {
 		ret token[1..-1]
 	}
@@ -141,6 +174,12 @@ let readFrom = fun tokens {
 	}
 
 	if tok == "(" {
+		// Empty list () is nil
+        if not (tokens[0].isNil()) and tokens[0] == ")" {
+            tokens.remove(0)
+            ret NIL
+        }
+
 		var L = []
 		while not (tokens[0].isNil()) and tokens[0] != ")" {
 			if tokens[0] == "." {
@@ -197,9 +236,8 @@ let envt = {}
 
 envt.find = fun self, key {
 	if key.type() == symbolType {
-		var val = self[key.symbol]
-		if not val.isNil() {
-			ret val
+		if self.has(key.symbol) {
+			ret self.get(key.symbol)
 		}
 		if self.outer {
 			ret self.outer.find(key)
@@ -223,8 +261,14 @@ envt.update = fun self, obj {
 
 
 
+let prelude = {}
+
+
+
+
+
 // Math operations
-envt["+"] = fun args... {
+prelude["+"] = fun args... {
     var sum = 0
     for _, a in args { sum = sum + a }
     ret sum
@@ -234,7 +278,7 @@ envt["+"] = fun args... {
 
 
 
-envt["*"] = fun args... {
+prelude["*"] = fun args... {
     var prod = 1
     for _, a in args { prod = prod * a }
     ret prod
@@ -244,7 +288,7 @@ envt["*"] = fun args... {
 
 
 
-envt["-"] = fun args... {
+prelude["-"] = fun args... {
     if args.isEmpty() { ret error("lambda '-' requires at least 1 argument") }
     if args.len() == 1 { ret -args[0] } // prefix negation
     var res = args[0]
@@ -258,7 +302,7 @@ envt["-"] = fun args... {
 
 
 
-envt["/"] = fun args... {
+prelude["/"] = fun args... {
     if args.isEmpty() { ret error("lambda '/' requires at least 1 argument") }
     if args.len() == 1 { ret 1.0 / args[0] } // prefix reciprocal
     var res = args[0]
@@ -273,7 +317,7 @@ envt["/"] = fun args... {
 
 
 // Comparison operations
-envt["eq"] = fun args... {
+prelude["eq"] = fun args... {
     if args.len() < 2 { ret error("lambda '=' requires at least 2 arguments") }
     var first = args[0]
     for i, a in args {
@@ -286,7 +330,7 @@ envt["eq"] = fun args... {
 
 
 
-envt["<"] = fun args... {
+prelude["<"] = fun args... {
     if args.len() < 2 { ret error("lambda '<' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
         if not (args[i] < args[i + 1]) { ret false }
@@ -298,7 +342,7 @@ envt["<"] = fun args... {
 
 
 
-envt["<="] = fun args... {
+prelude["<="] = fun args... {
     if args.len() < 2 { ret error("lambda '<=' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
         if not (args[i] <= args[i + 1]) { ret false }
@@ -310,7 +354,7 @@ envt["<="] = fun args... {
 
 
 
-envt[">"] = fun args... {
+prelude[">"] = fun args... {
     if args.len() < 2 { ret error("lambda '>' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
         if not (args[i] > args[i + 1]) { ret false }
@@ -322,7 +366,7 @@ envt[">"] = fun args... {
 
 
 
-envt[">="] = fun args... {
+prelude[">="] = fun args... {
     if args.len() < 2 { ret error("lambda '>=' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
         if not (args[i] >= args[i + 1]) { ret false }
@@ -335,7 +379,7 @@ envt[">="] = fun args... {
 
 
 // Bassic string operations
-envt["++"] = fun args... {
+prelude["++"] = fun args... {
 	// This is not an efficient functionality
     var acc = ""
     for _, a in args { acc = acc + a.toString() }
@@ -347,8 +391,9 @@ envt["++"] = fun args... {
 
 
 // prefix boolean not operator
-envt["not"] = fun args... {
+prelude["not"] = fun args... {
     if args.len() != 1 { ret error("lambda 'not' requires exactly 1 argument") }
+	if args[0].type() == nilType { ret true }
     ret not args[0]
 }
 
@@ -357,7 +402,7 @@ envt["not"] = fun args... {
 
 
 // binary rem operator
-envt["%"] = fun args... {
+prelude["%"] = fun args... {
     if args.len() != 2 { ret error("lambda '%' requires exactly 2 arguments") }
     ret args[0] % args[1]
 }
@@ -367,21 +412,21 @@ envt["%"] = fun args... {
 
 
 // is this redundant?
-envt["puts"] = fun args... { print("\n"); print(" ", ...args); ret "" }
+prelude["puts"] = fun args... { print("\n"); print(" ", ...args); ret "" }
 
 
 
 
 
 // Just for the sake of a good repl experience
-envt["clear"] = fun args... { clearScreen(); ret "" }
+prelude["clear"] = fun args... { clearScreen(); ret "" }
 
 
 
 
 
 // Some examples of built-in functionality
-envt["list-length"] = fun args... {
+prelude["list-length"] = fun args... {
 	if args.isEmpty() { ret error("lambda 'list-length' receives one argument") }
 	if args.len() == 1 {
 		var t = args[0].type()
@@ -396,7 +441,7 @@ envt["list-length"] = fun args... {
 
 
 
-envt["substring"] = fun args... {
+prelude["substring"] = fun args... {
 	if not args.isEmpty() and args.len() == 3 {
 		if 	args[0].type() == strType and 
 			args[1].type() == intType and 
@@ -411,7 +456,7 @@ envt["substring"] = fun args... {
 
 
 
-envt["string-join"] = fun args... {
+prelude["string-join"] = fun args... {
 	if not args.isEmpty() and args.len() == 2 {
 		if 	args[0].type() == strType and 
 			args[1].type() == arrayType {
@@ -425,7 +470,7 @@ envt["string-join"] = fun args... {
 
 
 
-envt["to-string"] = fun args... {
+prelude["to-string"] = fun args... {
 	if args.len() == 1 {
 		ret "%v".fmt(args[0])
 	}
@@ -436,13 +481,13 @@ envt["to-string"] = fun args... {
 
 
 
-envt["dict-new"] = fun args... -> {}
+prelude["dict-new"] = fun args... -> {}
 
 
 
 
 
-envt["dict-set"] = fun args... {
+prelude["dict-set"] = fun args... {
 	if args.len() == 3 {
 		if args[0].type() == objType and args[1].type() == strType {
 			args[0][args[1]] = args[2]
@@ -456,7 +501,7 @@ envt["dict-set"] = fun args... {
 
 
 
-envt["dict-get"] = fun args... {
+prelude["dict-get"] = fun args... {
 	if args.len() == 2 {
 		if 	args[0].type() == objType and 
 			args[1].type() == strType {
@@ -470,7 +515,7 @@ envt["dict-get"] = fun args... {
 
 
 
-envt["dict-keys"] = fun args... {
+prelude["dict-keys"] = fun args... {
 	if args.len() == 1 {
 		ret args[0].keys()
 	}
@@ -481,7 +526,7 @@ envt["dict-keys"] = fun args... {
 
 
 
-envt["dict-clear"] = fun args... {
+prelude["dict-clear"] = fun args... {
 	if args.len() == 1 {
 		ret {}
 	}
@@ -492,7 +537,7 @@ envt["dict-clear"] = fun args... {
 
 
 
-envt["list-append"] = fun args... {
+prelude["list-append"] = fun args... {
 	if args.len() == 2 {
 		if 	args[0].type() == arrayType {
 			var res = []
@@ -509,7 +554,7 @@ envt["list-append"] = fun args... {
 
 
 // Searches the environment chain to update an existing symbol
-envt["set!"] = fun self, key, val {
+prelude["set!"] = fun self, key, val {
 	if key.type() == symbolType {
 		var unwrapped = key.symbol
 		var current = self[unwrapped]
@@ -531,8 +576,9 @@ envt["set!"] = fun self, key, val {
 
 
 // Classic lisp list operations
-envt["car"] = fun args... {
+prelude["car"] = fun args... {
 	if args.len() == 1 {
+		if args[0].type() == nilType { ret NIL }
 		if args[0].type() == arrayType {
 			ret args[0][0]
 		}
@@ -544,8 +590,9 @@ envt["car"] = fun args... {
 
 
 
-envt["cdr"] = fun args... {
+prelude["cdr"] = fun args... {
 	if args.len() == 1 {
+		if args[0].type() == nilType { ret NIL }
 		if args[0].type() == arrayType {
 			ret args[0][1..]
 		}
@@ -557,11 +604,10 @@ envt["cdr"] = fun args... {
 
 
 
-envt["null?"] = fun args... {
+prelude["null?"] = fun args... {
 	if args.len() == 1 {
-		if args[0].type() == arrayType {
-			ret args[0].isEmpty()
-		}
+		if args[0].type() == nilType { ret true }
+		if args[0].type() == arrayType { ret args[0].isEmpty() }
 	}
 	ret error("lambda 'cdr' requires one argument of type list")
 }
@@ -570,7 +616,7 @@ envt["null?"] = fun args... {
 
 
 
-envt["cons"] = fun args... {
+prelude["cons"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'cons' requires two arguments") }
 	var elem = args[0]
 	var lst = args[1]
@@ -585,14 +631,14 @@ envt["cons"] = fun args... {
 
 
 
-envt["list"] = fun args... -> args
+prelude["list"] = fun args... -> args
 
 
 
 
 
 // Some classic high order functions
-envt["map"] = fun args... {
+prelude["map"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'map' requires two arguments") }
 	var proc = args[0]
 	var lst = args[1]
@@ -607,7 +653,7 @@ envt["map"] = fun args... {
 
 
 
-envt["filter"] = fun args... {
+prelude["filter"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'filter' requires two arguments") }
 	var proc = args[0]
 	var lst = args[1]
@@ -624,7 +670,7 @@ envt["filter"] = fun args... {
 
 
 
-envt["apply"] = fun args... {
+prelude["apply"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'apply' requires two arguments") }
 	var proc = args[0]
 	var argList = args[1]
@@ -643,7 +689,7 @@ let Env = fun -> { outer } =< envt
 
 
 // Global Environment constructor with built-in math functionality
-let makeGlobalEnv = fun -> Env().update(load("std.math"))
+let makeGlobalEnv = fun -> Env().update(prelude) //.update(load("std.math"))
 
 
 
@@ -673,15 +719,12 @@ let makeFnEnv = fun parms, args, outer {
 	var foundDot = false
 	
 	for _, p in parms {
-		// Check for the dot notation
 		if p == "." {
 			foundDot = true
 			continue
 		}
 		
 		if foundDot {
-			// Everything after the dot becomes a single rest parameter
-			// Collect all remaining unevaluated/raw args into a list
 			var restArgs = []
 			while i < args.len() {
 				restArgs.append(args[i])
@@ -689,11 +732,12 @@ let makeFnEnv = fun parms, args, outer {
 			}
 			
 			if p.type() == symbolType {
-				env[p.symbol] = restArgs
+				env.set(p.symbol, restArgs)
 			} else {
-				env[p] = restArgs
+				env.set(p, restArgs)
 			}
-			break // We're done processing parameters
+
+			break
 		}
 		
 		// Normal positional parameter binding
@@ -702,9 +746,9 @@ let makeFnEnv = fun parms, args, outer {
 		}
 		
 		if p.type() == symbolType {
-			env[p.symbol] = args[i]
+			env.set(p.symbol, args[i])
 		} else {
-			env[p] = args[i]
+			env.set(p, args[i])
 		}
 
 		i = i + 1
@@ -835,26 +879,27 @@ eval = fun code, env {
 
 
 	else if code[0] == "let" {
-        // Creates a new scope with local bindings
 		var bindings = code[1]
-		var new_env = Env()
-		new_env.outer = env
+		var newEnv = Env()
+		newEnv.outer = env
 		
 		for _, binding in bindings {
-			var var_name = binding[0]
-			// Evaluate values in the OUTER env
-			var var_val = eval(binding[1], env) 
+			if binding.type() != arrayType or binding.len() != 2 {
+        		ret error("let: malformed binding `%v`, expected (name value)".fmt(binding))
+    		}
+			var name = binding[0]
+			var val = eval(binding[1], env) 
 			
-			if var_name.type() == symbolType {
-				new_env[var_name.symbol] = var_val
+			if name.type() == symbolType {
+				newEnv.set(name.symbol, val)
 			} else {
-				new_env[var_name] = var_val
+				newEnv.set(name, val)
 			}
 		}
 		
 		var res = nil
 		for _, expr in code[2..] {
-			res = eval(expr, new_env)
+			res = eval(expr, newEnv)
 		}
 		ret res
 	}
@@ -906,13 +951,15 @@ eval = fun code, env {
 
 
 	else if code[0] == "if" {
+		var testVal = eval(code[1], env)
 		var exp = nil
-		if eval(code[1], env) {
-			exp = code[2]
-		} else {
-			exp = code[3]
-		}
-		ret eval(exp, env)
+		// nil and false are both falsy
+        if testVal.type() != nilType and testVal != false {
+            exp = code[2]
+        } else {
+            exp = code[3]
+        }
+        ret eval(exp, env)
 	}
 
 
@@ -960,6 +1007,11 @@ eval = fun code, env {
 		}
 		
 		ret res
+	}
+
+
+	else if code[0] == "print-env" {
+		ret showEnv(env)
 	}
 
 
@@ -1029,7 +1081,7 @@ let repl = fun prompt {
         
 		// Evaluate and print the result of each expression
 		for _, expr in ast {
-			print("\n\n  %v\n\n".fmt(eval(expr, env)))
+			print("\n\n  %v\n\n".fmt(eval(expr, env).toString()))
 		}
 	}
 }
@@ -1083,7 +1135,9 @@ repl(prompt)
 
 // ;; Variadic Math (puts "Sum:" (+ 1 2 3 4 5)) (puts "Left-associative sub:" (- 100 10 5 2))
 
-// (def pythagoras (lambda (a b) ;; Calculate the squares (def a2 (* a a)) (def b2 (* b b)) ;; Return the sum (+ a2 b2))) ;; This is an inline comment! ;; Let's test it with a string that has a semicolon inside (puts "Result; is:" (pythagoras 3 4))
+// (def pythagoras (lambda (a b) (def a2 (* a a)) (def b2 (* b b)) (+ a2 b2)))
+
+// (puts "Result; is:" (pythagoras 3 4))
 
 // (defmacro when (test . bodies) `(if ,test (begin ,@bodies)))
 
