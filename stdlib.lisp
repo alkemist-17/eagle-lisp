@@ -2,12 +2,12 @@
 ;; 🦅 EAGLE-LISP STANDARD LIBRARY (stdlib.lisp)
 ;; =============================================
 
-;; Some string stuff for fun
+;; Some lispy stuff for fun
 
 ;; Reverses a string using pure Lisp recursion!
 (def string-reverse
   (lambda (s)
-    (let ((len (string-length s)))
+    (let ((len (list-length s)))
       (if (<= len 1)
           s
           (string-append 
@@ -20,7 +20,7 @@
 
 (def palindrome?
   (lambda (s)
-    (= s (string-reverse s))))
+    (eq s (string-reverse s))))
 
 
 ;; STACK
@@ -65,4 +65,4 @@
     (if (< a b) a b)))
 
 
-(puts "🦅 Standard Library loaded successfully!")
+(puts "standard library loaded successfully")
