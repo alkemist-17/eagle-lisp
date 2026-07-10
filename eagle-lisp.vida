@@ -70,6 +70,23 @@ let clearScreen = fun {
 
 
 
+
+let isNumeric = fun a -> a.type() == intType or a.type() == floatType
+
+
+
+
+
+let areTheyComparable = fun a, b {
+	if isNumeric(a) and isNumeric(b) {
+		ret true
+	}
+	ret a.type() == b.type()
+}
+
+
+
+
 let showEnv = fun env {
 	var current = env
 	while current {
@@ -197,6 +214,9 @@ let readFrom = fun tokens {
 			}
 			L.append(readFrom(tokens))
 		}
+		if tokens.isEmpty() {
+    		ret error("unexpected EOF while reading list, expected ')'")
+		}
 		tokens.remove(0)
 		ret L
 	}
@@ -270,7 +290,12 @@ let prelude = {}
 // Math operations
 prelude["+"] = fun args... {
     var sum = 0
-    for _, a in args { sum = sum + a }
+    for _, a in args {
+		if not (a.type() == intType or a.type() == floatType) {
+			ret error("lambda '+' requires numeric arguments")
+		}
+		sum = sum + a 
+	}
     ret sum
 }
 
@@ -280,7 +305,12 @@ prelude["+"] = fun args... {
 
 prelude["*"] = fun args... {
     var prod = 1
-    for _, a in args { prod = prod * a }
+    for _, a in args {
+		if not (a.type() == intType or a.type() == floatType) {
+			ret error("lambda '-' requires numeric arguments")
+		}
+		prod = prod * a 
+	}
     ret prod
 }
 
@@ -293,7 +323,12 @@ prelude["-"] = fun args... {
     if args.len() == 1 { ret -args[0] } // prefix negation
     var res = args[0]
     for i, a in args {
-        if i > 0 { res = res - a }
+        if i > 0 {
+			if not (a.type() == intType or a.type() == floatType) {
+				ret error("lambda '-' requires numeric arguments")
+			}
+			res = res - a 
+		}
     }
     ret res
 }
@@ -304,10 +339,29 @@ prelude["-"] = fun args... {
 
 prelude["/"] = fun args... {
     if args.isEmpty() { ret error("lambda '/' requires at least 1 argument") }
-    if args.len() == 1 { ret 1.0 / args[0] } // prefix reciprocal
+    if args.len() == 1 {
+		// prefix reciprocal
+		if args[0].type() == intType or args[0].type() == floatType {
+			if args[0] == 0 {
+				ret error("division by zero")
+			}
+			ret 1.0 / args[0]
+		}
+		ret error("lambda '/' requires at least 1 numeric argument")
+	}
     var res = args[0]
+	if not (res.type() == intType or res.type() == floatType) {
+		ret error("lambda '/' requires numeric arguments")
+	}
     for i, a in args {
-        if i > 0 { res = res / a }
+        if i > 0 and (a.type() == intType or a.type() == floatType) {
+			if a == 0 {
+				ret error("division by zero")
+			}
+			res = res / a 
+		} else if i > 0 {
+			ret error("lambda '/' requires numeric arguments")
+		}
     }
     ret res
 }
@@ -333,7 +387,10 @@ prelude["eq"] = fun args... {
 prelude["<"] = fun args... {
     if args.len() < 2 { ret error("lambda '<' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
-        if not (args[i] < args[i + 1]) { ret false }
+		if areTheyComparable(args[i], args[i + 1]) {
+        	if not (args[i] < args[i + 1]) { ret false }
+		}
+		ret error("lambda '<' requires comparable values")
     }
     ret true
 }
@@ -345,7 +402,10 @@ prelude["<"] = fun args... {
 prelude["<="] = fun args... {
     if args.len() < 2 { ret error("lambda '<=' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
-        if not (args[i] <= args[i + 1]) { ret false }
+		if areTheyComparable(args[i], args[i + 1]) {
+        	if not (args[i] <= args[i + 1]) { ret false }
+		}
+		ret error("lambda '<=' requires comparable values")
     }
     ret true
 }
@@ -357,7 +417,10 @@ prelude["<="] = fun args... {
 prelude[">"] = fun args... {
     if args.len() < 2 { ret error("lambda '>' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
-        if not (args[i] > args[i + 1]) { ret false }
+		if areTheyComparable(args[i], args[i + 1]) {
+        	if not (args[i] > args[i + 1]) { ret false }
+		}
+		ret error("lambda '>' requires comparable values")
     }
     ret true
 }
@@ -369,7 +432,10 @@ prelude[">"] = fun args... {
 prelude[">="] = fun args... {
     if args.len() < 2 { ret error("lambda '>=' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
-        if not (args[i] >= args[i + 1]) { ret false }
+		if areTheyComparable(args[i], args[i + 1]) {
+        	if not (args[i] >= args[i + 1]) { ret false }
+		}
+		ret error("lambda '>=' requires comparable values")
     }
     ret true
 }
@@ -382,7 +448,7 @@ prelude[">="] = fun args... {
 prelude["++"] = fun args... {
 	// This is not an efficient functionality
     var acc = ""
-    for _, a in args { acc = acc + a.toString() }
+    for _, a in args { acc = acc.toString() + a.toString() }
     ret acc
 }
 
@@ -404,6 +470,11 @@ prelude["not"] = fun args... {
 // binary rem operator
 prelude["%"] = fun args... {
     if args.len() != 2 { ret error("lambda '%' requires exactly 2 arguments") }
+	var t0 = args[0].type()
+	var t1 = args[1].type()
+	if t0.type() != intType or t0.type() != floatType or t1.type() != intType or t1.type() != floatType {
+		ret error("lambda '%' requires numeric arguments")
+	}
     ret args[0] % args[1]
 }
 
@@ -547,28 +618,6 @@ prelude["list-append"] = fun args... {
 		}
 	}
 	ret error("lambda 'list-append' receives values of type list, value")
-}
-
-
-
-
-
-// Searches the environment chain to update an existing symbol
-prelude["set!"] = fun self, key, val {
-	if key.type() == symbolType {
-		var unwrapped = key.symbol
-		var current = self[unwrapped]
-		
-		if not current.isNil() {
-			self[unwrapped] = val
-			ret val
-		}
-		
-		if self.outer {
-			ret self.outer["set!"](self.outer, key, val)
-		}
-	}
-	ret error("symbol `%v` not defined".fmt(key))
 }
 
 
@@ -766,41 +815,45 @@ let eval = nil
 
 
 // Recursively expands `,x` and `,@x`
-let expandQuasiquote = fun expr, env {
-	if expr.type() != arrayType {
-		ret expr
-	}
-	
+let expandQuasiquote = fun expr, env, depth {
+	if expr.type() != arrayType { ret expr }
 	if expr.isEmpty() { ret [] }
-	
-	// Handle unquote at the top level: ,x -> evaluate x
+
+	if expr[0] == "quasiquote" {
+		ret ["quasiquote", expandQuasiquote(expr[1], env, depth + 1)]
+	}
+
 	if expr[0] == "unquote" {
-		ret eval(expr[1], env)
+		if depth == 0 { ret eval(expr[1], env) }
+		ret ["unquote", expandQuasiquote(expr[1], env, depth - 1)]
 	}
-	
-	// Top-level unquote-splicing is always an error
+
 	if expr[0] == "unquote-splicing" {
-		ret error("unquote-splicing used outside of list context")
+		if depth == 0 { ret error("unquote-splicing used outside of list context") }
+		ret ["unquote-splicing", expandQuasiquote(expr[1], env, depth - 1)]
 	}
-	
-	// Handling splicing
+
 	var res = []
 	for _, e in expr {
-		if e.type() == arrayType and not e.isEmpty() and e[0] == "unquote-splicing" {
-			// Splice: evaluate the expression and merge results into res
+		var isSplice = false
+		if e.type() == arrayType {
+			if not e.isEmpty() {
+				if e[0] == "unquote-splicing" {
+					if depth == 0 { isSplice = true }
+				}
+			}
+		}
+
+		if isSplice {
 			var spliced = eval(e[1], env)
 			if spliced.type() != arrayType {
 				ret error("unquote-splicing target must be a list, got %v".fmt(spliced.type()))
 			}
-			for _, item in spliced {
-				res.append(item)
-			}
+			for _, item in spliced { res.append(item) }
 		} else {
-			// Recursively expand non-splice elements
-			res.append(expandQuasiquote(e, env))
+			res.append(expandQuasiquote(e, env, depth))
 		}
 	}
-
 	ret res
 }
 
@@ -932,7 +985,7 @@ eval = fun code, env {
 
 	
 	else if code[0] == "quasiquote" {
-		ret expandQuasiquote(code[1], env)
+		ret expandQuasiquote(code[1], env, 0)
 	}
 
 
@@ -958,8 +1011,22 @@ eval = fun code, env {
 	else if code[0] == "set!" {
 		var key = code[1]
 		var val = eval(code[2], env)
-		env["set!"](env, key, val)
-		ret val
+
+		if key.type() != symbolType {
+			ret error("set!: expected a symbol, got `%v`".fmt(key))
+		}
+
+		var unwrapped = key.symbol
+		var current = env
+		while current {
+			if current.has(unwrapped) {
+				current.set(unwrapped, val)
+				ret val
+			}
+			current = current.outer
+		}
+
+		ret error("symbol `%v` not defined".fmt(key))
 	}
 
 
@@ -1007,6 +1074,11 @@ eval = fun code, env {
 	}
 
 
+	else if code[0] == "unquote" or code[0] == "unquote-splicing" {
+    	ret error("%v used outside of quasiquote".fmt(code[0]))
+	}
+
+
 	else {
 		var proc = eval(code[0], env)
 		
@@ -1029,7 +1101,9 @@ eval = fun code, env {
 		if proc.type() == "function" or proc.type() == "nativeFunction" {
 			var vals = []
 			for _, e in code[1..] {
-				vals.append(eval(e, env))
+				var v = eval(e, env)
+				if v.isError() { ret v }
+				vals.append(v)
 			}
 			ret proc(...vals)
 		}
@@ -1151,4 +1225,6 @@ repl(prompt)
 
 // (log-with-prefix "[INFO]" "Server started" "Listening on port 8080" "Ready!")
 
+// (def sum-to-acc (lambda (n acc) (if (eq n 0) acc (sum-to-acc (- n 1) (+ n acc)))))
 
+// (def mutate-outer (lambda () (let ((inner-var 20)) (set! outer-var 999) (set! inner-var 888) (list outer-var inner-var))))
