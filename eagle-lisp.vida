@@ -104,10 +104,10 @@ let atom = fun token {
 	if token.hasPrefix(`"`) and token.hasSuffix(`"`) {
 		ret token[1..-1]
 	}
-	if token == "f" {
+	if token == "#f" {
 		ret false
 	}
-	if token == "t" {
+	if token == "#t" {
 		ret true
 	}
 	if token.match(`^\d+$`) {
@@ -143,6 +143,19 @@ let readFrom = fun tokens {
 	if tok == "(" {
 		var L = []
 		while not (tokens[0].isNil()) and tokens[0] != ")" {
+			if tokens[0] == "." {
+				tokens.remove(0)
+				if tokens.isEmpty() or tokens[0] == ")" {
+					ret error("unexpected end after dot")
+				}
+				var cdr = readFrom(tokens)
+				L.append(".")
+				L.append(cdr)
+				if tokens.isEmpty() or tokens[0] != ")" {
+					ret error("expected ')' after dotted pair")
+				}
+				break
+			}
 			L.append(readFrom(tokens))
 		}
 		tokens.remove(0)
@@ -354,7 +367,7 @@ envt["%"] = fun args... {
 
 
 // is this redundant?
-envt["puts"] = fun args... { print("\n"); print(...args); ret "" }
+envt["puts"] = fun args... { print("\n"); print(" ", ...args); ret "" }
 
 
 
@@ -431,11 +444,9 @@ envt["dict-new"] = fun args... -> {}
 
 envt["dict-set"] = fun args... {
 	if args.len() == 3 {
-		if 	args[0].type() == objType and 
-			args[1].type() == strType {
-				var newDict = {}
-				newDict[args[1]] = args[2]
-				ret newDict
+		if args[0].type() == objType and args[1].type() == strType {
+			args[0][args[1]] = args[2]
+			ret args[0]
 		}
 	}
 	ret error("lambda 'dict-set' receives values of type dict, string, value")
@@ -718,7 +729,7 @@ let eval = nil
 
 
 
-// Recursively expands `,x` and `,@x` inside a quasiquoted template
+// Recursively expands `,x` and `,@x`
 let expandQuasiquote = fun expr, env {
 	if expr.type() != arrayType {
 		ret expr
@@ -726,30 +737,32 @@ let expandQuasiquote = fun expr, env {
 	
 	if expr.isEmpty() { ret [] }
 	
-	// Handle unquote: ,x -> evaluate x
+	// Handle unquote at the top level: ,x -> evaluate x
 	if expr[0] == "unquote" {
 		ret eval(expr[1], env)
 	}
 	
-	// Handle splicing: ,@x -> evaluate x and merge into parent list
+	// Top-level unquote-splicing is always an error
 	if expr[0] == "unquote-splicing" {
 		ret error("unquote-splicing used outside of list context")
 	}
 	
-	// Check if the first element of a nested list is a splice
-	if expr[0].type() == arrayType and not expr[0].isEmpty() and expr[0][0] == "unquote-splicing" {
-		var spliced = eval(expr[0][1], env)
-		var rest = expandQuasiquote(expr[1..], env)
-		var res = []
-		for _, item in spliced { res.append(item) }
-		for _, item in rest { res.append(item) }
-		ret res
-	}
-	
-	// Standard recursive descent for normal lists
+	// Handling splicing
 	var res = []
 	for _, e in expr {
-		res.append(expandQuasiquote(e, env))
+		if e.type() == arrayType and not e.isEmpty() and e[0] == "unquote-splicing" {
+			// Splice: evaluate the expression and merge results into res
+			var spliced = eval(e[1], env)
+			if spliced.type() != arrayType {
+				ret error("unquote-splicing target must be a list, got %v".fmt(spliced.type()))
+			}
+			for _, item in spliced {
+				res.append(item)
+			}
+		} else {
+			// Recursively expand non-splice elements
+			res.append(expandQuasiquote(e, env))
+		}
 	}
 
 	ret res
@@ -961,13 +974,9 @@ eval = fun code, env {
 		if proc.type() == macroType {
 			// Pass RAW, UNEVALUATED ASTs to the macro!
 			var rawArgs = code[1..]
-			print(rawArgs, "rawArgs")
 			
 			// Execute the macro to get the transformed code
-			print(proc.macroFn, "macroFn")
 			var expandedCode = proc::macroFn(...rawArgs)
-
-			print(expandedCode, "expandedCode")
 			
 			// Evaluate the NEW code in the CURRENT environment
 			ret eval(expandedCode, env)
@@ -992,7 +1001,7 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	print("\n\n\nWelcome to the Eagle Lisp REPL!\nType 'exit' to quit.\n\n\n")
+	print("\n\n\n  Welcome to the Eagle Lisp REPL!\n  Type '(quit)' to quit.\n\n\n")
 	var env = makeGlobalEnv()
 	var running = true
 	
@@ -1020,7 +1029,7 @@ let repl = fun prompt {
         
 		// Evaluate and print the result of each expression
 		for _, expr in ast {
-			print("\n\n%v\n\n".fmt(eval(expr, env)))
+			print("\n\n  %v\n\n".fmt(eval(expr, env)))
 		}
 	}
 }
@@ -1076,5 +1085,24 @@ repl(prompt)
 
 // (def pythagoras (lambda (a b) ;; Calculate the squares (def a2 (* a a)) (def b2 (* b b)) ;; Return the sum (+ a2 b2))) ;; This is an inline comment! ;; Let's test it with a string that has a semicolon inside (puts "Result; is:" (pythagoras 3 4))
 
+// (defmacro when (test . bodies) `(if ,test (begin ,@bodies)))
+
+// (when (> 5 3) (puts "Five is greater than three") (puts "Math works!") 42)
+
+// (def my-list (lambda (first . rest) (cons first rest)))
+
+// (puts "Rest params:" (my-list 1 2 3))
+
+// (defmacro when (test . bodies) `(if ,test (begin ,@bodies)))
+
+// (when (> 5 3) (puts "When macro works!") (puts "Multiple body expressions too!") 42)
+
+// (defmacro my-list (. items) `(list ,@items))
+
+// (puts (my-list 1 2 3))
+
+// (def log-with-prefix (lambda (prefix . messages) (map (lambda (msg) (puts prefix ":" msg)) messages)))
+
+// (log-with-prefix "[INFO]" "Server started" "Listening on port 8080" "Ready!")
 
 
