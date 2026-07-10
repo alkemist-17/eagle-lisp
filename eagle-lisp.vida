@@ -8,24 +8,23 @@ var re = load("std.re")
 var exception = load("std.exception")
 var os = load("std.os")
 var io = load("std.io")
+var symbolType = "Symbol"
 
 
 
 
 
+// clears screen
 var clearScreen = fun {
-	var osName = os::name()
-	if osName == "windows" { 
-		os::run("cmd", "/C", "cls")
-	} else {
-		os::run("clear")
-	}
+	if os::name() == "windows" { ret os::run("cmd", "/C", "cls") }
+	ret os::run("clear")
 }
 
 
+
+// tokenizes the input string
 var tokenize = fun s {
     var rawTokens = re::findAll(`[()]|"(?:\\.|[^"\\])*"|;[^\n]*|[^\s()]+`, s, -1)
-    
     var tokens = []
     for _, t in rawTokens {
         // Filter out the comments before returning the final token array
@@ -33,14 +32,17 @@ var tokenize = fun s {
             tokens.append(t)
         }
     }
-    
     ret tokens
 }
 
 
-var symvt = { type = fun self -> "Symbol" }
+
+// symbol vtable
+var symvt = { type = fun self -> symbolType }
 
 
+
+// Symbol constructor
 var Symbol = fun s {
     // Listo of special forms
 	if s in ["if", "def", "lambda", "quote", "begin", "cond", "let", "else", "set!", "and", "or", "load"] {
@@ -50,14 +52,16 @@ var Symbol = fun s {
 }
 
 
+
+// Transform a token into an atom
 var atom = fun token {
 	if token.hasPrefix(`"`) and token.hasSuffix(`"`) {
 		ret token[1..(token.len() - 1)]
 	}
-	if token == "#f" {
+	if token == "f" {
 		ret false
 	}
-	if token == "#t" {
+	if token == "t" {
 		ret true
 	}
 	if token.match(`^\d+$`) {
@@ -70,8 +74,10 @@ var atom = fun token {
 }
 
 
+
+// Parser helper functionality
 var rec readFrom = fun tokens {
-	if tokens.isEmpty() { ret error("unexpected eof while reading") }
+	if tokens.isEmpty() { ret error("unexpected eof while reading input string") }
 	var tok = tokens.remove(0)
 	if tok == "(" {
 		var L = []
@@ -92,26 +98,27 @@ var rec readFrom = fun tokens {
 }
 
 
+
+// Tiny lisp parser
 var parse = fun program {
     var tokens = tokenize(program)
     var ast = []
-    
-    // Keep reading expressions until the token stream is empty
     while not tokens.isEmpty() {
         ast.append(readFrom(tokens))
     }
-    
     ret ast
 }
 
 
+
+// Environment vtable
 var envt = {}
 
 
+
 envt.find = fun self, key {
-	if key.type() == "Symbol" {
-		var unwrapped = key.symbol
-		var val = self[unwrapped]
+	if key.type() == symbolType {
+		var val = self[key.symbol]
 		if not val.isNil() {
 			ret val
 		}
@@ -119,8 +126,9 @@ envt.find = fun self, key {
 			ret self.outer.find(key)
 		}
 	}
-	ret error("symbol `%v` not found".format(key))
+	ret error("symbol `%v` not found".fmt(key))
 }
+
 
 
 envt.update = fun self, obj {
@@ -131,18 +139,23 @@ envt.update = fun self, obj {
 }
 
 
-// --- MATH (VARIADIC) ---
+
+// Math operations
 envt["+"] = fun args... {
     var sum = 0
     for _, a in args { sum = sum + a }
     ret sum
 }
 
+
+
 envt["*"] = fun args... {
     var prod = 1
     for _, a in args { prod = prod * a }
     ret prod
 }
+
+
 
 envt["-"] = fun args... {
     if args.isEmpty() { ret error("lambda '-' requires at least 1 argument") }
@@ -155,6 +168,8 @@ envt["-"] = fun args... {
     ret res
 }
 
+
+
 envt["/"] = fun args... {
     if args.isEmpty() { ret error("lambda '/' requires at least 1 argument") }
     if args.len() == 1 { ret 1.0 / args[0] } // UNARY RECIPROCAL!
@@ -166,7 +181,9 @@ envt["/"] = fun args... {
     ret res
 }
 
-// COMPARISONS (CHAINING)
+
+
+// Comparison operations
 envt["="] = fun args... {
     if args.len() < 2 { ret error("lambda '=' requires at least 2 arguments") }
     var first = args[0]
@@ -176,6 +193,8 @@ envt["="] = fun args... {
     ret true
 }
 
+
+
 envt["<"] = fun args... {
     if args.len() < 2 { ret error("lambda '<' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
@@ -183,6 +202,8 @@ envt["<"] = fun args... {
     }
     ret true
 }
+
+
 
 envt["<="] = fun args... {
     if args.len() < 2 { ret error("lambda '<=' requires at least 2 arguments") }
@@ -192,6 +213,8 @@ envt["<="] = fun args... {
     ret true
 }
 
+
+
 envt[">"] = fun args... {
     if args.len() < 2 { ret error("lambda '>' requires at least 2 arguments") }
     for i in 0, (args.len() - 1) {
@@ -199,6 +222,8 @@ envt[">"] = fun args... {
     }
     ret true
 }
+
+
 
 envt[">="] = fun args... {
     if args.len() < 2 { ret error("lambda '>=' requires at least 2 arguments") }
@@ -208,25 +233,35 @@ envt[">="] = fun args... {
     ret true
 }
 
-// --- STRICTLY UNARY & BINARY ---
+
+
+// prefix operator
 envt["not"] = fun args... {
     if args.len() != 1 { ret error("lambda 'not' requires exactly 1 argument") }
     ret not args[0]
 }
 
+
+
+// binary operator
 envt["%"] = fun args... {
     if args.len() != 2 { ret error("lambda '%' requires exactly 2 arguments") }
     ret args[0] % args[1]
 }
 
 
+
 envt["puts"] = fun args... { print("\n"); print(...args); ret "" }
 
 
+
+// Just for the sake of a good repl experience
 envt[".clear"] = fun args... { clearScreen(); ret "" }
 
 
+
 // Bridge from Vida to the eagle-lisp stdlib
+// This is just examples and they are not intended to be complete
 envt["string-length"] = fun args... {
 	if not args.isEmpty() {
 		if args[0].type() == "string" {
@@ -235,6 +270,7 @@ envt["string-length"] = fun args... {
 	}
 	ret error("lambda 'string-length' receives values of type string only")
 }
+
 
 
 envt["substring"] = fun args... {
@@ -249,6 +285,7 @@ envt["substring"] = fun args... {
 }
 
 
+
 envt["string-join"] = fun args... {
 	if not args.isEmpty() and args.len() == 2 {
 		if 	args[0].type() == "string" and 
@@ -260,15 +297,18 @@ envt["string-join"] = fun args... {
 }
 
 
+
 envt["to-string"] = fun args... {
 	if not args.isEmpty() and args.len() == 1 {
-		ret format("%v", args[0])
+		ret fmt("%v", args[0])
 	}
 	ret error("lambda 'to-string' receives one argument")
 }
 
 
+
 envt["dict-new"] = fun args... -> {}
+
 
 
 envt["dict-set"] = fun args... {
@@ -283,6 +323,7 @@ envt["dict-set"] = fun args... {
 }
 
 
+
 envt["dict-get"] = fun args... {
 	if not args.isEmpty() and args.len() == 2 {
 		if 	args[0].type() == "object" and 
@@ -294,12 +335,14 @@ envt["dict-get"] = fun args... {
 }
 
 
+
 envt["dict-keys"] = fun args... {
 	if not args.isEmpty() and args.len() == 1 {
 		ret args[0].keys()
 	}
 	ret error("lambda 'dict-keys' receives one value of type object")
 }
+
 
 
 envt["list-append"] = fun args... {
@@ -331,13 +374,17 @@ envt["set!"] = fun self, key, val {
 			ret self.outer["set!"](self.outer, key, val)
 		}
 	}
-	ret error("symbol `%v` not defined for set!".format(key))
+	ret error("symbol `%v` not defined for set!".fmt(key))
 }
 
-// Classic and basic list Operations
+
+
+// Classic and basic list operations for now they are error prone
 envt["car"] = fun args... -> args[0][0]
 envt["cdr"] = fun args... -> args[0][1..]
 envt["null?"] = fun args... -> args[0].isEmpty()
+
+
 
 envt["cons"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'cons' requires two arguments") }
@@ -350,10 +397,13 @@ envt["cons"] = fun args... {
 	ret res
 }
 
+
+
 envt["list"] = fun args... -> args
 
 
-// High order functions
+
+// Some classic high order functions
 envt["map"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'map' requires two arguments") }
 	var proc = args[0]
@@ -364,6 +414,8 @@ envt["map"] = fun args... {
 	}
 	ret res
 }
+
+
 
 envt["filter"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'filter' requires two arguments") }
@@ -378,6 +430,8 @@ envt["filter"] = fun args... {
 	ret res
 }
 
+
+
 envt["apply"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'apply' requires two arguments") }
 	var proc = args[0]
@@ -386,18 +440,24 @@ envt["apply"] = fun args... {
 }
 
 
+
+// Environment constructor
 var Env = fun -> { outer } =< envt
 
 
+
+// Global Environment constructor
 var makeGlobalEnv = fun -> Env().update(load("std.math"))
 
 
+
+// Function Environment constructor
 var makeFnEnv = fun parms, args, outer {
 	var env = Env()
 	env.outer = outer
 	var zipped = {}
 	for i, v in parms {
-		if v.type() == "Symbol" {
+		if v.type() == symbolType {
 			zipped[v.symbol] = args[i]
 		} else {
 			zipped[v] = args[i]			
@@ -408,8 +468,10 @@ var makeFnEnv = fun parms, args, outer {
 }
 
 
+
+// The core of the lisp interpreter
 var rec eval = fun code, env {
-	if code.type() == "Symbol" {
+	if code.type() == symbolType {
 		ret env.find(code)
 	}
 
@@ -559,7 +621,7 @@ var rec eval = fun code, env {
 		if io::exists(path) {
 			sourceCode = io::readFile(path)
 		} else {
-			ret error("source file '%v' does not exist".format(path))
+			ret error("source file '%v' does not exist".fmt(path))
 		}
 		
 		var asts = parse(sourceCode)
@@ -587,14 +649,16 @@ var rec eval = fun code, env {
 			ret proc(...vals)
 		}
 		
-		ret error("value `%v` is not a lambda expression".format(code[0]))
+		ret error("value `%v` is not a lambda expression".fmt(code[0]))
 	}
 }
 
 
+
+// The REPL
 var repl = fun prompt {
 	clearScreen()
-	print("\n\n\nWelcome to the Eagle Lisp (🦅) repl!\nType 'exit()' to quit.\n\n\n")
+	print("\n\n\nWelcome to the Eagle Lisp (🦅) REPL!\nType 'exit' to quit.\n\n\n")
 	var env = makeGlobalEnv()
 	var running = true
 	while running {
@@ -617,16 +681,23 @@ var repl = fun prompt {
         
         // Evaluate and print the result of each expression
 		for _, expr in ast {
-			print("\n\n%v\n\n".format(eval(expr, env)))
+			print("\n\n%v\n\n".fmt(eval(expr, env)))
 		}
 	}
 }
 
 
+
 var prompt = "eagle-lisp (🦅) > "
 
 
+
+// Everything starts here!
 repl(prompt)
+
+
+
+
 
 
 
