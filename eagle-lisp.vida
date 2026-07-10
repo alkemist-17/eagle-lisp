@@ -953,10 +953,12 @@ eval = fun code, env {
 	else if code[0] == "lambda" {
         // Now supports multiple expressions in the body!
 		ret fun args... {
-			var fn_env = makeFnEnv(code[1], args, env)
+			var fEnv = makeFnEnv(code[1], args, env)
+			if fEnv.isError() { ret fEnv }
 			var res = nil
 			for _, e in code[2..] {
-				res = eval(e, fn_env)
+				res = eval(e, fEnv)
+				if res.isError() { ret res }
 			}
 			ret res
 		}
@@ -970,10 +972,10 @@ eval = fun code, env {
 		var body = code[3..]
 		
 		var macroFn = fun args... {
-			var fn_env = makeFnEnv(params, args, env)
+			var fEnv = makeFnEnv(params, args, env)
 			var res = nil
 			for _, e in body {
-				res = eval(e, fn_env)
+				res = eval(e, fEnv)
 			}
 			ret res
 		}
