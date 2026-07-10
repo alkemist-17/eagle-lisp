@@ -689,7 +689,7 @@ let Env = fun -> { outer } =< envt
 
 
 // Global Environment constructor with built-in math functionality
-let makeGlobalEnv = fun -> Env().update(prelude) //.update(load("std.math"))
+let makeGlobalEnv = fun -> Env().update(load("std.math")).update(prelude)
 
 
 
