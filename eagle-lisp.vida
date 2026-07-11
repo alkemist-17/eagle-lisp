@@ -103,11 +103,13 @@ let showEnv = fun env {
 let tokenize = fun s {
     var rawTokens = re::findAll(`[()]|,@|,|"(?:\\.|[^"\\])*"|;[^\n]*|\.|[^\s()]+`, s, -1)
     var tokens = []
-    for _, t in rawTokens {
-        if not t.hasPrefix(";") {
-            tokens.append(t)
-        }
-    }
+	if rawTokens {
+		for _, t in rawTokens {
+        	if not t.hasPrefix(";") {
+            	tokens.append(t)
+        	}
+    	}
+	}
     ret tokens
 }
 
