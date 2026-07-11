@@ -506,12 +506,6 @@ prelude["print"] = fun args... { print("\n"); print(" ", ...args); ret NIL }
 
 
 
-prelude["clear"] = fun args... { clearScreen(); ret "" }
-
-
-
-
-
 prelude["list-length"] = fun args... {
 	if args.isEmpty() { ret error("lambda 'list-length' receives one argument") }
 	if args.len() == 1 {
