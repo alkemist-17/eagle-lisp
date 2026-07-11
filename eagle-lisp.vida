@@ -1098,6 +1098,10 @@ eval = fun code, env {
 	}
 
 	else if code[0] == "atom" {
+		var maybeAtom = code[1]
+		if maybeAtom.type() == symbolType {
+			ret isAtom(eval(maybeAtom, env))
+		}
 		ret isAtom(code[1])
 	}
 
