@@ -176,28 +176,28 @@
 (defmacro when (test . bodies) `(if ,test (begin ,@bodies) nil))
 
 ;; expect: 42
-(when (> 5 3) (puts "five > three") 42)
+(when (> 5 3) (print "five > three") 42)
 
 ;; expect: nil, and "nope" should NOT print
-(when (> 3 5) (puts "nope") 42)
+(when (> 3 5) (print "nope") 42)
 
 ;; Macro hygiene stress: does the macro's internal naming collide
 ;; with a user variable also called `test`?
 (def test 999)
 ;; expect: "still 999" printed, and result 999 -- not a hygiene collision
-(when (> 1 0) (puts "still" test) test)
+(when (> 1 0) (print "still" test) test)
 
 ;; Nested macro expansion.
 (defmacro unless (test . bodies) `(if (not ,test) (begin ,@bodies) nil))
 ;; expect: "printed"
-(unless #f (puts "printed"))
+(unless #f (print "printed"))
 ;; expect: nil, nothing printed
-(unless #t (puts "should not print"))
+(unless #t (print "should not print"))
 
 ;; Recursive-ish macro use: macro calling into code that itself
 ;; uses another macro.
 ;; expect: "both" 1
-(when #t (unless #f (puts "both")) 1)
+(when #t (unless #f (print "both")) 1)
 
 ;; quasiquote with splicing of a computed list.
 (def nums (list 1 2 3))
@@ -287,7 +287,7 @@
 ;; and/or short-circuiting -- side effects should NOT fire past
 ;; the short-circuit point.
 (def side-effect-log (list))
-(def log! (lambda (tag val) (puts "SIDE EFFECT:" tag) val))
+(def log! (lambda (tag val) (print "SIDE EFFECT:" tag) val))
 ;; expect: only "checking-1" printed, result #f -- log-2 must NOT fire
 (and (log! "checking-1" #f) (log! "checking-2" #t))
 ;; expect: only "checking-3" printed, result #t -- log-4 must NOT fire
@@ -351,7 +351,7 @@
 "(parens) \"nested-quotes\" ; semicolon"
 ;; a semicolon INSIDE a string must not be treated as a comment start.
 ;; expect: "before;after" printed in full, nothing truncated
-(puts "before;after")
+(print "before;after")
 ;; empty string edge cases.
 ;; expect: 0
 (list-length "")

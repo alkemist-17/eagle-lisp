@@ -483,7 +483,7 @@ prelude["%"] = fun args... {
 
 
 // is this redundant?
-prelude["puts"] = fun args... { print("\n"); print(" ", ...args); ret "" }
+prelude["print"] = fun args... { print("\n"); print(" ", ...args); ret "" }
 
 
 
@@ -1173,57 +1173,57 @@ repl(prompt)
 
 // (def fib (lambda (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))) (fib 10) (fib 15)
 
-// (def classify (lambda (x) (cond ((< x 0) "Negative") ((= x 0) "Zero") (else "Positive")))) (puts (classify 5))
+// (def classify (lambda (x) (cond ((< x 0) "Negative") ((= x 0) "Zero") (else "Positive")))) (print (classify 5))
 
-// (let ((x 10) (y 20)) (puts "x is" x "and y is" y) (+ x y))
+// (let ((x 10) (y 20)) (print "x is" x "and y is" y) (+ x y))
 
 // (def make-counter (lambda () (let ((count 0)) (lambda () (set! count (+ count 1)) count))))
 
 // (def c1 (make-counter)) (def c2 (make-counter))
 
-// (puts "C1:" (c1) (c1) (c1)) (puts "C2:" (c2) (c2))
+// (print "C1:" (c1) (c1) (c1)) (print "C2:" (c2) (c2))
 
 // (def my-list (list 1 2 3 4 5))
 
-// (puts "First element:" (car my-list)) (puts "The rest:" (cdr my-list)) (puts "Prepend a zero:" (cons 0 my-list))
+// (print "First element:" (car my-list)) (print "The rest:" (cdr my-list)) (print "Prepend a zero:" (cons 0 my-list))
 
 // (def my-list (list 1 2 3 4 5))
 
-// (def double (lambda (x) (* x 2))) (puts "Doubled:" (map double my-list))
+// (def double (lambda (x) (* x 2))) (print "Doubled:" (map double my-list))
 
-// (def is-even? (lambda (x) (= (% x 2) 0))) (puts "Evens only:" (filter is-even? my-list))
+// (def is-even? (lambda (x) (= (% x 2) 0))) (print "Evens only:" (filter is-even? my-list))
 
-// (def add-three (lambda (a b c) (+ a (+ b c)))) (puts "Applied:" (apply add-three (list 10 20 30)))
+// (def add-three (lambda (a b c) (+ a (+ b c)))) (print "Applied:" (apply add-three (list 10 20 30)))
 
-// (puts "Empty sum:" (+)) (puts "Empty product:" (*))
+// (print "Empty sum:" (+)) (print "Empty product:" (*))
 
-// ;; Unary Inverses (puts "Negative 5:" (- 5)) (puts "Reciprocal of 4:" (/ 4))
+// ;; Unary Inverses (print "Negative 5:" (- 5)) (print "Reciprocal of 4:" (/ 4))
 
-// ;; Chaining Comparisons (puts "Is 1 < 2 < 3?" (< 1 2 3)) (puts "Is 5 = 5 = 5?" (= 5 5 5))
+// ;; Chaining Comparisons (print "Is 1 < 2 < 3?" (< 1 2 3)) (print "Is 5 = 5 = 5?" (= 5 5 5))
 
-// ;; Variadic Math (puts "Sum:" (+ 1 2 3 4 5)) (puts "Left-associative sub:" (- 100 10 5 2))
+// ;; Variadic Math (print "Sum:" (+ 1 2 3 4 5)) (print "Left-associative sub:" (- 100 10 5 2))
 
 // (def pythagoras (lambda (a b) (def a2 (* a a)) (def b2 (* b b)) (+ a2 b2)))
 
-// (puts "Result; is:" (pythagoras 3 4))
+// (print "Result; is:" (pythagoras 3 4))
 
 // (defmacro when (test . bodies) `(if ,test (begin ,@bodies)))
 
-// (when (> 5 3) (puts "Five is greater than three") (puts "Math works!") 42)
+// (when (> 5 3) (print "Five is greater than three") (print "Math works!") 42)
 
 // (def my-list (lambda (first . rest) (cons first rest)))
 
-// (puts "Rest params:" (my-list 1 2 3))
+// (print "Rest params:" (my-list 1 2 3))
 
 // (defmacro when (test . bodies) `(if ,test (begin ,@bodies)))
 
-// (when (> 5 3) (puts "When macro works!") (puts "Multiple body expressions too!") 42)
+// (when (> 5 3) (print "When macro works!") (print "Multiple body expressions too!") 42)
 
 // (defmacro my-list (. items) `(list ,@items))
 
-// (puts (my-list 1 2 3))
+// (print (my-list 1 2 3))
 
-// (def log-with-prefix (lambda (prefix . messages) (map (lambda (msg) (puts prefix ":" msg)) messages)))
+// (def log-with-prefix (lambda (prefix . messages) (map (lambda (msg) (print prefix ":" msg)) messages)))
 
 // (log-with-prefix "[INFO]" "Server started" "Listening on port 8080" "Ready!")
 

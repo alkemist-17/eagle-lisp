@@ -65,4 +65,4 @@
     (if (< a b) a b)))
 
 
-(puts "standard library loaded successfully")
+(print "standard library loaded successfully")
