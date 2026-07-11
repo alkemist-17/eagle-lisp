@@ -289,7 +289,7 @@ let dictvt = {
 	type = fun self -> dictType
 
 	toString = fun self {
-		var out = "{"
+		var out = "dict["
 		var ks = self.keys()
 		var first = true
 		for _, k in ks {
@@ -297,7 +297,7 @@ let dictvt = {
 			out = out + `"` + k + `": ` + self[k].toString()
 			first = false
 		}
-		ret out + "}"
+		ret out + "]"
 	}
 }
 
@@ -1352,11 +1352,10 @@ eval = fun code, env {
 	}
 
 	else if code[0] == "atom" {
-		var maybeAtom = code[1]
-		if maybeAtom.type() == symbolType {
-			ret isAtom(eval(maybeAtom, env))
+		if code[1].type() == symbolType {
+			ret true
 		}
-		ret isAtom(code[1])
+		ret isAtom(eval(code[1], env))
 	}
 
 	else if code[0] == "load" {
