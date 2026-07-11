@@ -756,8 +756,19 @@ let makeGlobalEnv = fun -> Env().update(load("std.math")).update(prelude)
 
 
 
+// Let local environment
+let makeLetEnv = fun outer {
+	var env = Env()
+	env.outer = outer
+	ret env
+}
+
+
+
+
+
 // Function Environment constructor
-let makeFnEnv = fun parms, args, outer {
+let makeFunctionEnv = fun parms, args, outer {
 	var env = Env()
 	env.outer = outer
 
@@ -826,7 +837,8 @@ let eval = nil
 
 
 
-// Recursively expands `,x` and `,@x`
+// Recursively expands `,x` (unquote) and `,@x` (splicing)
+// This function returns ASTs
 let expandQuasiquote = fun expr, env, depth {
 	if expr.type() != arrayType { ret expr }
 	if expr.isEmpty() { ret [] }
@@ -846,6 +858,7 @@ let expandQuasiquote = fun expr, env, depth {
 	}
 
 	var res = []
+	
 	for _, e in expr {
 		var isSplice = false
 		if e.type() == arrayType {
@@ -859,13 +872,14 @@ let expandQuasiquote = fun expr, env, depth {
 		if isSplice {
 			var spliced = eval(e[1], env)
 			if spliced.type() != arrayType {
-				ret error("unquote-splicing target must be a list, got %v".fmt(spliced.type()))
+				ret error("unquote-splicing target must be a list, got `%v`".fmt(spliced.type()))
 			}
 			for _, item in spliced { res.append(item) }
 		} else {
 			res.append(expandQuasiquote(e, env, depth))
 		}
 	}
+
 	ret res
 }
 
@@ -873,7 +887,9 @@ let expandQuasiquote = fun expr, env, depth {
 
 
 
-// The core of the lisp interpreter
+// Eval is the core of the lisp interpreter.
+// This core engine is a recursive evaluator of expressions.
+// The task it does is reduce the top S-Expression received as code in the environment env.
 eval = fun code, env {
 	if code.type() == symbolType {
 		ret env.find(code)
@@ -910,10 +926,10 @@ eval = fun code, env {
 	else if code[0] == "cond" {
         // Evaluates conditions in order. If one is true, evaluates its body.
 		for _, clause in code[1..] {
-			var test_expr = clause[0]
+			var testExpr = clause[0]
             
             // Check for the explicit 'else' keyword
-			if test_expr == "else" {
+			if testExpr == "else" {
 				var res = nil
 				for _, expr in clause[1..] {
 					res = eval(expr, env)
@@ -922,8 +938,8 @@ eval = fun code, env {
 			}
             
             // Otherwise, evaluate the condition
-			var test_val = eval(test_expr, env)
-			if test_val {
+			var testResult = eval(testExpr, env)
+			if testResult {
 				var res = nil
 				for _, expr in clause[1..] {
 					res = eval(expr, env)
@@ -936,39 +952,41 @@ eval = fun code, env {
 
 
 	else if code[0] == "let" {
-		var bindings = code[1]
-		var newEnv = Env()
-		newEnv.outer = env
+		var bindings = code[1] // Expecting a list of lists
+		var localEnv = makeLetEnv(env)
 		
 		for _, binding in bindings {
-			if binding.type() != arrayType or binding.len() != 2 {
+			if not (binding.type() == arrayType or binding.len() == 2) {
         		ret error("let: malformed binding `%v`, expected (name value)".fmt(binding))
     		}
+
 			var name = binding[0]
 			var val = eval(binding[1], env) 
 			
 			if name.type() == symbolType {
-				newEnv.set(name.symbol, val)
+				localEnv.set(name.symbol, val)
 			} else {
-				newEnv.set(name, val)
+				localEnv.set(name, val)
 			}
 		}
 		
 		var res = nil
+		
 		for _, expr in code[2..] {
-			res = eval(expr, newEnv)
+			res = eval(expr, localEnv)
 		}
+
 		ret res
 	}
 
     
 	else if code[0] == "lambda" {
 		ret fun args... {
-			var fEnv = makeFnEnv(code[1], args, env)
-			if fEnv.isError() { ret fEnv }
+			var lambdaEnv = makeFunctionEnv(code[1], args, env)
+			if lambdaEnv.isError() { ret lambdaEnv }
 			var res = nil
 			for _, e in code[2..] {
-				res = eval(e, fEnv)
+				res = eval(e, lambdaEnv)
 				if res.isError() { ret res }
 			}
 			ret res
@@ -977,21 +995,25 @@ eval = fun code, env {
 
 
 	else if code[0] == "defmacro" {
+		if code[1].type() != symbolType {
+			ret error("expected a symbol after defmacro, got `%v`".fmt(code[1].type()))
+		}
+		
 		var name = code[1].symbol
 		var params = code[2]
 		var body = code[3..]
 		
 		var macroFn = fun args... {
-			var fEnv = makeFnEnv(params, args, env)
+			var macroEnv = makeFunctionEnv(params, args, env)
 			var res = nil
 			for _, e in body {
-				res = eval(e, fEnv)
+				res = eval(e, macroEnv)
 			}
 			ret res
 		}
 
 		var macro = Macro(macroFn)
-		env[name] = macro
+		env.set(name, macro)
 		ret macro
 	}
 
@@ -1002,8 +1024,12 @@ eval = fun code, env {
 
 
 	else if code[0] == "def" {
-		env[code[1].symbol] = eval(code[2], env)
-		ret env[code[1].symbol]
+		if code[1].type() != symbolType {
+			ret error("expected a symbol after def, got `%v`".fmt(code[1].type()))
+		}
+		var name = code[1].symbol 
+		env.set(name, eval(code[2], env))
+		ret env[name]
 	}
 
 
@@ -1024,11 +1050,12 @@ eval = fun code, env {
 		var val = eval(code[2], env)
 
 		if key.type() != symbolType {
-			ret error("set!: expected a symbol, got `%v`".fmt(key))
+			ret error("expected a symbol after set!, got `%v`".fmt(key))
 		}
 
 		var unwrapped = key.symbol
 		var current = env
+
 		while current {
 			if current.has(unwrapped) {
 				current.set(unwrapped, val)
@@ -1067,7 +1094,7 @@ eval = fun code, env {
 		if io::exists(path) {
 			sourceCode = io::readFile(path)
 		} else {
-			ret error("source file '%v' does not exist".fmt(path))
+			ret error("file '%v' does not exist".fmt(path))
 		}
 		
 		var asts = parse(sourceCode)
@@ -1075,13 +1102,12 @@ eval = fun code, env {
 		for _, expr in asts {
 			res = eval(expr, env)
 		}
-		
 		ret res
 	}
 
 
 	else if code[0] == "print-env" {
-		ret showEnv(env)
+		ret showEnv(env) // just for debugging
 	}
 
 
@@ -1099,13 +1125,13 @@ eval = fun code, env {
 
 		// Macro expansion engine
 		if proc.type() == macroType {
-			// Pass RAW, UNEVALUATED ASTs to the macro
+			// Pass raw, unevaluated ASTs to the macro
 			var rawArgs = code[1..]
 			
 			// Execute the macro to get the transformed code
 			var expandedCode = proc::macroFn(...rawArgs)
 			
-			// Evaluate the NEW code in the CURRENT environment
+			// Evaluate the new generated code ar runtime in the current environment
 			ret eval(expandedCode, env)
 		}
 		
