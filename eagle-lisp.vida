@@ -1181,7 +1181,6 @@ let repl = fun prompt {
 		if userInput.trim().toLower() in ["exit", "quit", "(exit)", "(quit)"] {
 			running = false
 			clearScreen()
-			print("\n\n\nEagle Lisp says: Farewell!\n\n\n")
 			continue
 		}
 
