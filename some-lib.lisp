@@ -1,5 +1,5 @@
 ;; =============================================
-;; 🦅 EAGLE-LISP STANDARD LIBRARY (stdlib.lisp)
+;; 🦅 EAGLE-LISP EXAMPLE LIBRARY (some-lib.lisp)
 ;; =============================================
 
 ;; Some lispy stuff for fun
@@ -64,5 +64,4 @@
   (lambda (a b)
     (if (< a b) a b)))
 
-
-(print "standard library loaded successfully")
+(print "some-lib loaded successfully")
