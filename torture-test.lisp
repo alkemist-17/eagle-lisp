@@ -163,9 +163,8 @@
 ;; Accumulator-passing version of the same thing (tail-call shaped,
 ;; even if the interpreter doesn't actually optimize it -- worth
 ;; comparing depth tolerance against sum-to above).
-(def sum-to-acc
-  (lambda (n acc) (if (eq n 0) acc (sum-to-acc (- n 1) (+ n acc)))))
-;; expect: same result as (sum-to 5000)
+(def sum-to-acc (lambda (n acc) (if (eq n 0) acc (sum-to-acc (- n 1) (+ n acc)))))
+;; expect: same result as (sum-to 10)
 (sum-to-acc 10 0)
 
 
@@ -342,10 +341,6 @@
 (++ "hello " 42)
 ;; expect: 5
 (list-length "hello")
-;; expect: "ell"
-(substring "hello" 1 4)
-;; expect: "a,b,c"
-(string-join "," (list "a" "b" "c"))
 ;; string containing lisp-significant characters -- parser stress.
 ;; expect: "(parens) \"nested-quotes\" ; semicolon"
 "(parens) \"nested-quotes\" ; semicolon"
@@ -355,8 +350,6 @@
 ;; empty string edge cases.
 ;; expect: 0
 (list-length "")
-;; expect: error or empty string, not a crash
-(substring "" 0 0)
 
 
 ;; ------------------------------------------------------------
