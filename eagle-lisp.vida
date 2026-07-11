@@ -13,10 +13,11 @@ let os = load("std.os")
 let io = load("std.io")
 let symbolType = "Symbol"
 let nilType = "Nil"
+let pairType = "Pair"
 let macroType = "Macro"
+let dictType = "Dict"
 let arrayType = [].type()
 let strType = "".type()
-let objType = {}.type()
 let intType = (42).type()
 let floatType = (0.5).type()
 let osName = os::name()
@@ -58,6 +59,253 @@ let nilvt = {
 
 
 let NIL = {} =< nilvt
+
+
+
+
+
+// Lisp Pair
+// ============================================================
+// Pair — The list primitive
+// A proper list is:  NIL or Pair(x, <proper list>)
+// A dotted pair is:  Pair(x, <anything that isn't NIL or a Pair>)
+// ============================================================
+
+
+
+
+
+// Pair vtable
+let pairvt = {
+	type = fun self -> pairType
+
+	toString = fun self {
+		var out = "("
+		var current = self
+		var first = true
+
+		while current.type() == pairType {
+			if not first { out = out + " " }
+			out = out + current.car.toString()
+			first = false
+			current = current.cdr
+		}
+
+		// current is now the tail: NIL (proper list) or some other
+		// atom (improper / dotted list) -- print the dot if so
+		if current.type() != nilType {
+			out = out + " . " + current.toString()
+		}
+
+		ret out + ")"
+	}
+}
+
+
+
+
+
+// Pair builder
+let Pair = fun car, cdr -> { car = car, cdr = cdr } =< pairvt
+
+
+
+
+
+let isPair = fun v -> v.type() == pairType
+
+
+
+
+
+// "proper list" = NIL, or a Pair chain whose final cdr is NIL
+let isProperList = fun v {
+	var current = v
+	while current.type() == pairType {
+		current = current.cdr
+	}
+	ret current.type() == nilType
+}
+
+
+
+
+let pairCar = fun p {
+	if p.type() == nilType { ret NIL }
+	if p.type() == pairType { ret p.car }
+	ret error("car: expected a pair or nil, got `%v`".fmt(p.type()))
+}
+
+
+
+
+
+let pairCdr = fun p {
+	if p.type() == nilType { ret NIL }
+	if p.type() == pairType { ret p.cdr }
+	ret error("cdr: expected a pair or nil, got `%v`".fmt(p.type()))
+}
+
+
+
+
+
+let pairCons = fun elem, lst -> Pair(elem, lst)
+
+
+
+
+
+// Calls fn(item) for each element of a proper Pair-based list, in
+// order. Errors if lst is not NIL or a Pair (garbage input), or if
+// it's an improper (dotted) list -- callers like map/filter/apply
+// need a well-defined proper list, not a dangling tail.
+let pairForEach = fun lst, fn {
+	var current = lst
+
+	while current.type() == pairType {
+		fn(current.car)
+		current = current.cdr
+	}
+
+	if current.type() != nilType {
+		ret error("expected a proper list, got improper tail `%v`".fmt(current))
+	}
+
+	ret NIL
+}
+
+
+
+
+
+// Temporaty migration helper functions
+// arrayToList([1,2,3])       -> (1 2 3)
+// arrayToList([1,2], someTail) -> (1 2 . someTail)  -- for dotted reads later
+let arrayToList = fun arr, tail {
+	var result = tail
+	if result.isNil() { result = NIL }
+	var i = arr.len() - 1
+	while i >= 0 {
+		result = Pair(arr[i], result)
+		i = i - 1
+	}
+	ret result
+}
+
+// Walks a Pair chain back into a Vida array. Errors on a genuine
+// dotted pair, since arrays have no way to represent an improper tail.
+let listToArray = fun lst {
+	var result = []
+	var current = lst
+
+	while current.type() == pairType {
+		result.append(current.car)
+		current = current.cdr
+	}
+
+	if current.type() != nilType {
+		ret error("cannot convert improper list to array, dangling `%v`".fmt(current))
+	}
+
+	ret result
+}
+
+
+
+
+
+// Converts a raw parsed AST node into Pair-based data.
+let astToData = fun node {
+	if node.type() != arrayType {
+		ret node   // atoms pass through unchanged
+	}
+
+	if node.isEmpty() {
+		ret NIL
+	}
+
+	// Find a top-level "." and treat everything after it as the tail
+	var dotIndex = -1
+	var i = 0
+	for _, item in node {
+		if item == "." {
+			dotIndex = i
+		}
+		i = i + 1
+	}
+
+	if dotIndex == -1 {
+		// Proper list: recursively convert each element, tail is NIL
+		var result = NIL
+		var j = node.len() - 1
+		while j >= 0 {
+			result = Pair(astToData(node[j]), result)
+			j = j - 1
+		}
+		ret result
+	}
+
+	// Dotted: node[dotIndex] is the "." sentinel itself, so the real
+	// tail is node[dotIndex + 1], and the head elements are everything
+	// before dotIndex.
+	var tail = astToData(node[dotIndex + 1])
+	var j = dotIndex - 1
+	while j >= 0 {
+		tail = Pair(astToData(node[j]), tail)
+		j = j - 1
+	}
+	ret tail
+}
+
+
+
+
+// Converts real Pair-based data back into array-shaped AST, so
+// quasiquote-generated macro bodies can be fed back into eval,
+// which only understands array-shaped code. Inverse of astToData.
+let dataToAst = fun data {
+	if data.type() != pairType {
+		ret data   // atoms pass here
+	}
+	var out = []
+	var current = data
+	while current.type() == pairType {
+		out.append(dataToAst(current.car))
+		current = current.cdr
+	}
+	if current.type() != nilType {
+		out.append(".")
+		out.append(dataToAst(current))
+	}
+	ret out
+}
+
+
+
+
+
+let dictvt = {
+	type = fun self -> dictType
+
+	toString = fun self {
+		var out = "{"
+		var ks = self.keys()
+		var first = true
+		for _, k in ks {
+			if not first { out = out + ", " }
+			out = out + `"` + k + `": ` + self[k].toString()
+			first = false
+		}
+		ret out + "}"
+	}
+}
+
+
+
+
+
+let Dict = fun -> {} =< dictvt
 
 
 
@@ -128,7 +376,10 @@ let tokenize = fun s {
 
 
 // symbol vtable
-let symvt = { type = fun self -> symbolType }
+let symvt = {
+	type = fun self -> symbolType
+	toString = fun self -> self.symbol
+}
 
 
 
@@ -275,7 +526,7 @@ envt.find = fun self, key {
 			ret self.outer.find(key)
 		}
 	}
-	ret error("symbol `%v` not found".fmt(key))
+	ret error("symbol `%v` not found".fmt(key.toString()))
 }
 
 
@@ -293,13 +544,13 @@ envt.update = fun self, obj {
 
 
 
+// Prelude lib
 let prelude = {}
 
 
 
 
 
-// Prelude lib
 prelude["+"] = fun args... {
     var sum = 0
     for _, a in args {
@@ -506,50 +757,6 @@ prelude["print"] = fun args... { print("\n"); print(" ", ...args); ret NIL }
 
 
 
-prelude["list-length"] = fun args... {
-	if args.isEmpty() { ret error("lambda 'list-length' receives one argument") }
-	if args.len() == 1 {
-		var t = args[0].type()
-		if t == strType or t == arrayType {
-			ret args[0].len()
-		}
-	}
-	ret error("lambda 'list-length' receives one value of type string or list only")
-}
-
-
-
-
-
-prelude["substring"] = fun args... {
-	if not args.isEmpty() and args.len() == 3 {
-		if 	args[0].type() == strType and 
-			args[1].type() == intType and 
-			args[2].type() == intType {
-			ret args[0][args[1]..args[2]]
-		}
-	}
-	ret error("lambda 'substring' receives values of type string, int, int")
-}
-
-
-
-
-
-prelude["string-join"] = fun args... {
-	if not args.isEmpty() and args.len() == 2 {
-		if 	args[0].type() == strType and 
-			args[1].type() == arrayType {
-			ret args[0].join(args[1])
-		}
-	}
-	ret error("lambda 'string-join' receives values of type string, list")
-}
-
-
-
-
-
 prelude["to-string"] = fun args... {
 	if args.len() == 1 {
 		ret "%v".fmt(args[0])
@@ -561,7 +768,7 @@ prelude["to-string"] = fun args... {
 
 
 
-prelude["dict-new"] = fun args... -> {}
+prelude["dict-new"] = fun args... -> Dict()
 
 
 
@@ -569,7 +776,7 @@ prelude["dict-new"] = fun args... -> {}
 
 prelude["dict-set"] = fun args... {
 	if args.len() == 3 {
-		if args[0].type() == objType and args[1].type() == strType {
+		if args[0].type() == dictType and args[1].type() == strType {
 			args[0][args[1]] = args[2]
 			ret args[0]
 		}
@@ -583,8 +790,7 @@ prelude["dict-set"] = fun args... {
 
 prelude["dict-get"] = fun args... {
 	if args.len() == 2 {
-		if 	args[0].type() == objType and 
-			args[1].type() == strType {
+		if args[0].type() == dictType and args[1].type() == strType {
 			ret args[0][args[1]]
 		}
 	}
@@ -597,7 +803,9 @@ prelude["dict-get"] = fun args... {
 
 prelude["dict-keys"] = fun args... {
 	if args.len() == 1 {
-		ret args[0].keys()
+		if args[0].type() == dictType {
+			ret arrayToList(args[0].keys(), nil)
+		}
 	}
 	ret error("lambda 'dict-keys' receives one value of type dict")
 }
@@ -608,7 +816,7 @@ prelude["dict-keys"] = fun args... {
 
 prelude["dict-clear"] = fun args... {
 	if args.len() == 1 {
-		ret {}
+		if args[0].type() == dictType { ret Dict() }
 	}
 	ret error("lambda 'dict-clear' receives one value of type dict")
 }
@@ -617,16 +825,15 @@ prelude["dict-clear"] = fun args... {
 
 
 
-prelude["list-append"] = fun args... {
-	if args.len() == 2 {
-		if 	args[0].type() == arrayType {
-			var res = []
-    		for _, item in args[0] { res.append(item) }
-    		res.append(args[1])
-    		ret res
-		}
-	}
-	ret error("lambda 'list-append' receives values of type list, value")
+prelude["list"] = fun args... -> arrayToList(args, nil)
+
+
+
+
+
+prelude["cons"] = fun args... {
+	if args.len() != 2 { ret error("lambda 'cons' requires exactly 2 arguments") }
+	ret pairCons(args[0], args[1])
 }
 
 
@@ -634,13 +841,8 @@ prelude["list-append"] = fun args... {
 
 
 prelude["car"] = fun args... {
-	if args.len() == 1 {
-		if args[0].type() == nilType { ret NIL }
-		if args[0].type() == arrayType {
-			ret args[0][0]
-		}
-	}
-	ret error("lambda 'car' requires one argument of type list")
+	if args.len() != 1 { ret error("lambda 'car' requires exactly 1 argument") }
+	ret pairCar(args[0])
 }
 
 
@@ -648,13 +850,8 @@ prelude["car"] = fun args... {
 
 
 prelude["cdr"] = fun args... {
-	if args.len() == 1 {
-		if args[0].type() == nilType { ret NIL }
-		if args[0].type() == arrayType {
-			ret args[0][1..]
-		}
-	}
-	ret error("lambda 'cdr' requires one argument of type list")
+	if args.len() != 1 { ret error("lambda 'cdr' requires exactly 1 argument") }
+	ret pairCdr(args[0])
 }
 
 
@@ -662,50 +859,28 @@ prelude["cdr"] = fun args... {
 
 
 prelude["null?"] = fun args... {
-	if args.len() == 1 {
-		if args[0].type() == nilType { ret true }
-		if args[0].type() == arrayType { ret args[0].isEmpty() }
-	}
-	ret error("lambda 'cdr' requires one argument of type list")
+	if args.len() != 1 { ret error("lambda 'null?' requires exactly 1 argument") }
+	ret args[0].type() == nilType
 }
-
-
-
-
-
-prelude["cons"] = fun args... {
-	if args.len() < 2 { ret error("lambda 'cons' requires two arguments") }
-	var elem = args[0]
-	var lst = args[1]
-	var res = [elem]
-	for _, item in lst {
-		res.append(item)
-	}
-	ret res
-}
-
-
-
-
-
-prelude["list"] = fun args... -> args
 
 
 
 
 
 prelude["map"] = fun args... {
-	if args.len() < 2 { ret error("lambda 'map' requires two arguments") }
+	if args.len() != 2 { ret error("lambda 'map' requires exactly 2 arguments") }
 	var proc = args[0]
 	var lst = args[1]
-	var res = []
-	if not ((proc.type() == "function" or proc.type() == "nativeFunction") and lst.type() == arrayType) {
-		ret error("lambda 'map' requires two arguments of type lambda, list")
+
+	if not (proc.type() == "function" or proc.type() == "nativeFunction") {
+		ret error("lambda 'map' requires a lambda as its first argument")
 	}
-	for _, item in lst {
-		res.append(proc(item))
-	}
-	ret res
+
+	var out = []
+	var result = pairForEach(lst, fun item -> out.append(proc(item)))
+	if result.isError() { ret result }
+
+	ret arrayToList(out, nil)
 }
 
 
@@ -713,19 +888,21 @@ prelude["map"] = fun args... {
 
 
 prelude["filter"] = fun args... {
-	if args.len() < 2 { ret error("lambda 'filter' requires two arguments") }
+	if args.len() != 2 { ret error("lambda 'filter' requires exactly 2 arguments") }
 	var proc = args[0]
 	var lst = args[1]
-	var res = []
-	if not ((proc.type() == "function" or proc.type() == "nativeFunction") and lst.type() == arrayType) {
-		ret error("lambda 'filter' requires two arguments of type lambda, list")
+
+	if not (proc.type() == "function" or proc.type() == "nativeFunction") {
+		ret error("lambda 'filter' requires a lambda as its first argument")
 	}
-	for _, item in lst {
-		if proc(item) {
-			res.append(item)
-		}
-	}
-	ret res
+
+	var out = []
+	var result = pairForEach(lst, fun item {
+		if proc(item) { out.append(item) }
+	})
+	if result.isError() { ret result }
+
+	ret arrayToList(out, nil)
 }
 
 
@@ -733,13 +910,94 @@ prelude["filter"] = fun args... {
 
 
 prelude["apply"] = fun args... {
-	if args.len() < 2 { ret error("lambda 'apply' requires two arguments") }
+	if args.len() != 2 { ret error("lambda 'apply' requires exactly 2 arguments") }
 	var proc = args[0]
 	var argList = args[1]
-	if not ((proc.type() == "function" or proc.type() == "nativeFunction") and argList.type() == arrayType) {
-		ret error("lambda 'apply' requires two arguments of type lambda, list")
+
+	if not (proc.type() == "function" or proc.type() == "nativeFunction") {
+		ret error("lambda 'apply' requires a lambda as its first argument")
 	}
-	ret proc(...argList)
+
+	var argArr = listToArray(argList)
+	if argArr.isError() { ret argArr }
+
+	ret proc(...argArr)
+}
+
+
+
+
+
+prelude["list-length"] = fun args... {
+	if args.len() != 1 { ret error("lambda 'list-length' requires exactly 1 argument") }
+
+	if args[0].type() == strType { ret args[0].len() }
+
+	var counter = []
+	var result = pairForEach(args[0], fun item -> counter.append(item))
+	if result.isError() { ret result }
+	ret counter.len()
+}
+
+
+
+
+
+prelude["list-append"] = fun args... {
+	if args.len() != 2 { ret error("lambda 'list-append' requires exactly 2 arguments") }
+
+	var out = []
+	var result = pairForEach(args[0], fun item -> out.append(item))
+	if result.isError() { ret result }
+
+	out.append(args[1])
+	ret arrayToList(out, nil)
+}
+
+
+
+
+
+// Structural equality: two Pairs are equal? if their cars and cdrs
+// are (recursively) equal?. Symbols are equal? by name, not by
+// reference, since Symbol() builds a fresh object every call.
+// Everything else falls back to eq's identity/value comparison.
+let pairEqual = fun a, b {
+	// Fast path: same reference (or same primitive value) short-circuits
+	if a == b { ret true }
+
+	var ta = a.type()
+	var tb = b.type()
+
+	if ta != tb {
+		// One special case: nilType vs anything else can never be
+		// equal, but this is already covered by ta != tb below since
+		// nothing else reports nilType -- no extra branch needed.
+		ret false
+	}
+
+	if ta == pairType {
+		if not pairEqual(a.car, b.car) { ret false }
+		ret pairEqual(a.cdr, b.cdr)
+	}
+
+	if ta == symbolType {
+		ret a.symbol == b.symbol
+	}
+
+	// Same type, not a Pair or Symbol, and reference/value equality
+	// above already failed -- genuinely not equal (e.g. two
+	// different numbers, two different strings).
+	ret false
+}
+
+
+
+
+
+prelude["equal?"] = fun args... {
+	if args.len() != 2 { ret error("lambda 'equal?' requires exactly 2 arguments") }
+	ret pairEqual(args[0], args[1])
 }
 
 
@@ -776,12 +1034,10 @@ let makeFunctionEnv = fun parms, args, outer {
 	var env = Env()
 	env.outer = outer
 
-
 	if parms.type() == symbolType {
-		env.set(parms.symbol, args)
+		env.set(parms.symbol, arrayToList(args, nil))
 		ret env
 	}
-	
 	
 	var i = 0
 	var foundDot = false
@@ -800,17 +1056,17 @@ let makeFunctionEnv = fun parms, args, outer {
 			}
 			
 			if p.type() == symbolType {
-				env.set(p.symbol, restArgs)
+				env.set(p.symbol, arrayToList(restArgs, nil))
 			} else {
-				env.set(p, restArgs)
+				env.set(p, arrayToList(restArgs, nil))
 			}
 
 			break
 		}
 		
-		// Normal positional parameter binding
+		// unchanged below
 		if i >= args.len() {
-			ret error("not enough arguments for parameter `%v`".fmt(p))
+			ret error("not enough arguments for parameter `%v`".fmt(p.toString()))
 		}
 		
 		if p.type() == symbolType {
@@ -822,7 +1078,6 @@ let makeFunctionEnv = fun parms, args, outer {
 		i = i + 1
 	}
 	
-	// If we didn't find a dot, ensure no extra arguments were passed
 	if not foundDot and i < args.len() {
 		ret error("too many arguments: expected %v, got %v".fmt(parms.len(), args.len()))
 	}
@@ -875,12 +1130,16 @@ let expandQuasiquote = fun expr, env, depth {
 
 		if isSplice {
 			var spliced = eval(e[1], env)
-			if spliced.type() != arrayType {
-				ret error("unquote-splicing target must be a list, got `%v`".fmt(spliced.type()))
+			if not (spliced.type() == pairType or spliced.type() == nilType) {
+    			ret error("unquote-splicing target must be a proper list, got `%v`".fmt(spliced.type()))
 			}
-			for _, item in spliced { res.append(item) }
+			var sourceArr = listToArray(spliced)
+			if sourceArr.isError() { ret sourceArr }
+			for _, item in sourceArr { res.append(item) }
 		} else {
-			res.append(expandQuasiquote(e, env, depth))
+			var expanded = expandQuasiquote(e, env, depth)
+    		if expanded.isError() { ret expanded }
+    		res.append(expanded)
 		}
 	}
 
@@ -912,8 +1171,7 @@ eval = fun code, env {
 
 
 	else if code[0] == "quote" {
-        // Returns the unevaluated expression
-		ret code[1]
+		ret astToData(code[1])
 	}
 
 
@@ -961,7 +1219,7 @@ eval = fun code, env {
 		
 		for _, binding in bindings {
 			if not (binding.type() == arrayType or binding.len() == 2) {
-        		ret error("let: malformed binding `%v`, expected (name value)".fmt(binding))
+        		ret error("let: malformed binding `%v`, expected (name value)".fmt(binding.toString()))
     		}
 
 			var name = binding[0]
@@ -1023,7 +1281,9 @@ eval = fun code, env {
 
 	
 	else if code[0] == "quasiquote" {
-		ret expandQuasiquote(code[1], env, 0)
+		var expanded = expandQuasiquote(code[1], env, 0)
+		if expanded.isError() { ret expanded }
+		ret astToData(expanded)
 	}
 
 
@@ -1068,7 +1328,7 @@ eval = fun code, env {
 			current = current.outer
 		}
 
-		ret error("symbol `%v` not defined".fmt(key))
+		ret error("symbol `%v` not defined".fmt(key.toString()))
 	}
 
 
@@ -1142,9 +1402,10 @@ eval = fun code, env {
 			
 			// Execute the macro to get the transformed code
 			var expandedCode = proc::macroFn(...rawArgs)
+			if expandedCode.isError() { ret expandedCode }
 			
 			// Evaluate the new generated code ar runtime in the current environment
-			ret eval(expandedCode, env)
+			ret eval(dataToAst(expandedCode), env)
 		}
 		
 		if proc.type() == "function" or proc.type() == "nativeFunction" {
@@ -1157,7 +1418,7 @@ eval = fun code, env {
 			ret proc(...vals)
 		}
 		
-		ret error("value `%v` is not a lambda expression".fmt(code[0]))
+		ret error("value `%v` is not a lambda expression".fmt(code[0].toString()))
 	}
 }
 
@@ -1208,8 +1469,6 @@ let repl = fun prompt {
 
 // Everything starts here!
 repl(prompt)
-
-
 
 
 
@@ -1276,5 +1535,9 @@ repl(prompt)
 // (log-with-prefix "[INFO]" "Server started" "Listening on port 8080" "Ready!")
 
 // (def sum-to-acc (lambda (n acc) (if (eq n 0) acc (sum-to-acc (- n 1) (+ n acc)))))
+
+// (def mutate-outer (lambda () (let ((inner-var 20)) (set! outer-var 999) (set! inner-var 888) (list outer-var inner-var))))
+
+// (def make-adders (lambda () (list (let ((n 1)) (lambda () n)) (let ((n 2)) (lambda () n)) (let ((n 3)) (lambda () n)))))
 
 // (def mutate-outer (lambda () (let ((inner-var 20)) (set! outer-var 999) (set! inner-var 888) (list outer-var inner-var))))
