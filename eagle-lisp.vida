@@ -20,6 +20,8 @@ let objType = {}.type()
 let intType = (42).type()
 let floatType = (0.5).type()
 let osName = os::name()
+let knownAtoms = [symbolType, nilType, strType, intType, floatType]
+let eagleLispVersion = "0.9.0"
 let specialForms = [
 	"if", 
 	"def", 
@@ -36,6 +38,7 @@ let specialForms = [
 	"or", 
 	"load",
 	"nil",
+	"atom",
 	"print-env"
 ]
 let prompt = "> "
@@ -83,6 +86,13 @@ let areTheyComparable = fun a, b {
 	}
 	ret a.type() == b.type()
 }
+
+
+
+
+
+let isAtom = fun e -> e.type() in knownAtoms
+
 
 
 
@@ -1087,6 +1097,10 @@ eval = fun code, env {
 		ret false
 	}
 
+	else if code[0] == "atom" {
+		ret isAtom(code[1])
+	}
+
 	else if code[0] == "load" {
 		var path = eval(code[1], env)
 		var sourceCode = nil
@@ -1156,7 +1170,7 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	print("\n\n\n  Welcome to the Eagle Lisp REPL!\n  Type '(quit)' to quit.\n\n\n")
+	print("\n\n\n  Welcome to the REPL!\n  Eagle Lisp %v\n\n\n".fmt(eagleLispVersion))
 	var env = makeGlobalEnv()
 	var running = true
 	
@@ -1174,7 +1188,7 @@ let repl = fun prompt {
 		
 		// Check if the input is just whitespace
 		if userInput.trim().isEmpty() {
-			print("\n\n\n\n")
+			clearScreen()
 			continue
 		}
 
