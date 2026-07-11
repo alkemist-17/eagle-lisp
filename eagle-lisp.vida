@@ -1,5 +1,5 @@
 //
-// Eagle Lisp: A little tiny experimental Lisp Interpreter
+// Eagle Lisp: An experimental Lisp Interpreter
 //
 
 
@@ -289,7 +289,7 @@ let prelude = {}
 
 
 
-// Math operations
+// Prelude lib
 prelude["+"] = fun args... {
     var sum = 0
     for _, a in args {
@@ -375,7 +375,6 @@ prelude["/"] = fun args... {
 
 
 
-// Comparison operations
 prelude["eq"] = fun args... {
     if args.len() < 2 { ret error("lambda '=' requires at least 2 arguments") }
     var first = args[0]
@@ -453,7 +452,6 @@ prelude[">="] = fun args... {
 
 
 
-// Bassic string operations
 prelude["++"] = fun args... {
 	// This is not an efficient functionality
     var acc = ""
@@ -465,7 +463,6 @@ prelude["++"] = fun args... {
 
 
 
-// prefix boolean not operator
 prelude["not"] = fun args... {
     if args.len() != 1 { ret error("lambda 'not' requires exactly 1 argument") }
 	if args[0].type() == nilType { ret true }
@@ -476,7 +473,6 @@ prelude["not"] = fun args... {
 
 
 
-// binary rem operator
 prelude["%"] = fun args... {
     if args.len() != 2 { ret error("lambda '%' requires exactly 2 arguments") }
 	var t0 = args[0].type()
@@ -494,21 +490,18 @@ prelude["%"] = fun args... {
 
 
 
-// is this redundant?
 prelude["print"] = fun args... { print("\n"); print(" ", ...args); ret NIL }
 
 
 
 
 
-// Just for the sake of a good repl experience
 prelude["clear"] = fun args... { clearScreen(); ret "" }
 
 
 
 
 
-// Some examples of built-in functionality
 prelude["list-length"] = fun args... {
 	if args.isEmpty() { ret error("lambda 'list-length' receives one argument") }
 	if args.len() == 1 {
@@ -636,7 +629,6 @@ prelude["list-append"] = fun args... {
 
 
 
-// Classic lisp list operations
 prelude["car"] = fun args... {
 	if args.len() == 1 {
 		if args[0].type() == nilType { ret NIL }
@@ -698,7 +690,6 @@ prelude["list"] = fun args... -> args
 
 
 
-// Some classic high order functions
 prelude["map"] = fun args... {
 	if args.len() < 2 { ret error("lambda 'map' requires two arguments") }
 	var proc = args[0]
@@ -972,7 +963,6 @@ eval = fun code, env {
 
     
 	else if code[0] == "lambda" {
-        // Now supports multiple expressions in the body!
 		ret fun args... {
 			var fEnv = makeFnEnv(code[1], args, env)
 			if fEnv.isError() { ret fEnv }
@@ -987,7 +977,6 @@ eval = fun code, env {
 
 
 	else if code[0] == "defmacro" {
-		// Store the macro as a lambda, but tag it so eval knows it's a macro
 		var name = code[1].symbol
 		var params = code[2]
 		var body = code[3..]
@@ -1021,7 +1010,6 @@ eval = fun code, env {
 	else if code[0] == "if" {
 		var testVal = eval(code[1], env)
 		var exp = nil
-		// nil and false are both falsy
         if testVal.type() != nilType and testVal != false {
             exp = code[2]
         } else {
@@ -1057,7 +1045,7 @@ eval = fun code, env {
 		var res = true
 		for _, e in code[1..] {
 			res = eval(e, env)
-			if not res { ret false } // Short-circuits!
+			if not res { ret false }
 		}
 		ret res
 	}
@@ -1067,7 +1055,7 @@ eval = fun code, env {
 		var res = false
 		for _, e in code[1..] {
 			res = eval(e, env)
-			if res { ret res } // Short-circuits!
+			if res { ret res }
 		}
 		ret false
 	}
@@ -1111,7 +1099,7 @@ eval = fun code, env {
 
 		// Macro expansion engine
 		if proc.type() == macroType {
-			// Pass RAW, UNEVALUATED ASTs to the macro!
+			// Pass RAW, UNEVALUATED ASTs to the macro
 			var rawArgs = code[1..]
 			
 			// Execute the macro to get the transformed code
@@ -1160,6 +1148,7 @@ let repl = fun prompt {
 		
 		// Check if the input is just whitespace
 		if userInput.trim().isEmpty() {
+			print("\n\n\n\n")
 			continue
 		}
 
@@ -1169,6 +1158,7 @@ let repl = fun prompt {
         
         
 		// Evaluate and print the result of each expression
+		// This is one of the list procesor (lisp) part
 		for _, expr in ast {
 			print("\n\n  %v\n\n".fmt(eval(expr, env).toString()))
 		}
