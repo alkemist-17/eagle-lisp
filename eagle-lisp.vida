@@ -23,7 +23,7 @@ let intType = (42).type()
 let floatType = (0.5).type()
 let osName = os::name()
 let knownAtoms = [symbolType, nilType, strType, intType, floatType]
-let eagleLispVersion = "0.9.1"
+let eagleLispVersion = "0.9.3"
 let specialForms = [
 	"if", 
 	"def", 
@@ -1216,25 +1216,25 @@ eval = fun code, env {
 
 
 	else if code[0] == "cond" {
-        // Evaluates conditions in order. If one is true, evaluates its body.
 		for _, clause in code[1..] {
 			var testExpr = clause[0]
-            
-            // Check for the explicit 'else' keyword
+
 			if testExpr == "else" {
 				var res = nil
 				for _, expr in clause[1..] {
 					res = eval(expr, env)
+					if res.isError() { ret res }
 				}
 				ret res
 			}
-            
-            // Otherwise, evaluate the condition
+
 			var testResult = eval(testExpr, env)
+			if testResult.isError() { ret testResult }
 			if testResult {
 				var res = nil
 				for _, expr in clause[1..] {
 					res = eval(expr, env)
+					if res.isError() { ret res }
 				}
 				ret res
 			}
@@ -1297,9 +1297,11 @@ eval = fun code, env {
 		
 		var macroFn = fun args... {
 			var macroEnv = makeFunctionEnv(params, args, env)
+			if macroEnv.isError() { ret macroEnv }
 			var res = nil
 			for _, e in body {
 				res = eval(e, macroEnv)
+				if res.isError() { ret res }
 			}
 			ret res
 		}
@@ -1329,6 +1331,7 @@ eval = fun code, env {
 
 	else if code[0] == "if" {
 		var testVal = eval(code[1], env)
+		if testVal.isError() { ret testVal }
 		var exp = nil
         if testVal.type() != nilType and testVal != false {
             exp = code[2]
@@ -1366,6 +1369,7 @@ eval = fun code, env {
 		var res = true
 		for _, e in code[1..] {
 			res = eval(e, env)
+			if res.isError() { ret res }
 			if not res { ret false }
 		}
 		ret res
@@ -1376,6 +1380,7 @@ eval = fun code, env {
 		var res = false
 		for _, e in code[1..] {
 			res = eval(e, env)
+			if res.isError() { ret res }
 			if res { ret res }
 		}
 		ret false
