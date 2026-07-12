@@ -51,7 +51,7 @@ let prompt = "> "
 // lisp nil
 let nilvt = {
 	type = fun self -> nilType
-	toString = fun self -> "nil"
+	toString = fun self -> "NIL"
 }
 
 
