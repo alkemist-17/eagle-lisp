@@ -768,7 +768,7 @@ prelude["to-string"] = fun args... {
 
 
 
-prelude["dict"] = fun args... -> Dict()
+prelude["make-dict"] = fun args... -> Dict()
 
 
 
