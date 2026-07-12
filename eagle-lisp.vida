@@ -7,6 +7,7 @@
 
 
 let text = load("std.text")
+let style = load("std.style")
 let re = load("std.re")
 let exception = load("std.exception")
 let os = load("std.os")
@@ -43,6 +44,7 @@ let specialForms = [
 	"print-env"
 ]
 let prompt = "> "
+let eagleStyle = style::new()
 
 
 
@@ -1456,7 +1458,7 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	print("\n\n\n  Welcome to the REPL!\n  Eagle Lisp v%v\n\n\n".fmt(eagleLispVersion))
+	print(eagleStyle.bgHex("#FF737F").fgName("black").bold().sprint("\n\n\n                        \n  Welcome to the REPL!  \n  Eagle Lisp v%v     \n                        \n\n\n".fmt(eagleLispVersion)))
 	var env = makeGlobalEnv()
 	var running = true
 	
