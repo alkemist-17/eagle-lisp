@@ -22,7 +22,7 @@ let intType = (42).type()
 let floatType = (0.5).type()
 let osName = os::name()
 let knownAtoms = [symbolType, nilType, strType, intType, floatType]
-let eagleLispVersion = "0.9.0"
+let eagleLispVersion = "0.9.1"
 let specialForms = [
 	"if", 
 	"def", 
@@ -958,6 +958,26 @@ prelude["list-append"] = fun args... {
 
 
 
+prelude["string->symbol"] = fun args... {
+	if args.len() != 1 { ret error("lambda 'string->symbol' requires exactly 1 argument") }
+	if args[0].type() != strType { ret error("lambda 'string->symbol' requires a string argument") }
+	ret Symbol(args[0])
+}
+
+
+
+
+
+prelude["symbol->string"] = fun args... {
+	if args.len() != 1 { ret error("lambda 'symbol->string' requires exactly 1 argument") }
+	if args[0].type() != symbolType { ret error("lambda 'symbol->string' requires a symbol argument") }
+	ret args[0].symbol
+}
+
+
+
+
+
 // Structural equality: two Pairs are equal? if their cars and cdrs
 // are (recursively) equal?. Symbols are equal? by name, not by
 // reference, since Symbol() builds a fresh object every call.
@@ -1328,7 +1348,7 @@ eval = fun code, env {
 			current = current.outer
 		}
 
-		ret error("symbol `%v` not defined".fmt(key.toString()))
+		ret error("symbol `%v` is unbound".fmt(key.toString()))
 	}
 
 
@@ -1403,7 +1423,7 @@ eval = fun code, env {
 			var expandedCode = proc::macroFn(...rawArgs)
 			if expandedCode.isError() { ret expandedCode }
 			
-			// Evaluate the new generated code ar runtime in the current environment
+			// Evaluate the new generated code at runtime in the current environment
 			ret eval(dataToAst(expandedCode), env)
 		}
 		
@@ -1540,3 +1560,9 @@ repl(prompt)
 // (def make-adders (lambda () (list (let ((n 1)) (lambda () n)) (let ((n 2)) (lambda () n)) (let ((n 3)) (lambda () n)))))
 
 // (def mutate-outer (lambda () (let ((inner-var 20)) (set! outer-var 999) (set! inner-var 888) (list outer-var inner-var))))
+
+// (def gensym-counter (list 0))
+
+// (def gensym (lambda () (set! gensym-counter (list (+ (car gensym-counter) 1))) (string->symbol (++ "g$" (to-string (car gensym-counter))))))
+
+// (defmacro my-or (a b) (let ((g (gensym))) `(let ((,g ,a)) (if ,g ,g ,b))))
