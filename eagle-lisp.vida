@@ -526,7 +526,7 @@ envt.find = fun self, key {
 			ret self.outer.find(key)
 		}
 	}
-	ret error("symbol `%v` not found".fmt(key.toString()))
+	ret error("symbol `%v` is unbound".fmt(key.toString()))
 }
 
 
@@ -759,7 +759,7 @@ prelude["print"] = fun args... { print("\n"); print(" ", ...args); ret NIL }
 
 prelude["to-string"] = fun args... {
 	if args.len() == 1 {
-		ret "%v".fmt(args[0])
+		ret args[0].toString()
 	}
 	ret error("lambda 'to-string' receives one argument")
 }
@@ -768,7 +768,7 @@ prelude["to-string"] = fun args... {
 
 
 
-prelude["dict-new"] = fun args... -> Dict()
+prelude["dict"] = fun args... -> Dict()
 
 
 
