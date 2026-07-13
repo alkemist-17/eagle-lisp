@@ -968,9 +968,9 @@ prelude["list-append"] = fun args... {
 
 
 
-prelude["string->symbol"] = fun args... {
-	if args.len() != 1 { ret error("lambda 'string->symbol' requires exactly 1 argument") }
-	if args[0].type() != strType { ret error("lambda 'string->symbol' requires a string argument") }
+prelude["make-symbol"] = fun args... {
+	if args.len() != 1 { ret error("lambda 'make->symbol' requires exactly 1 argument") }
+	if args[0].type() != strType { ret error("lambda 'make->symbol' requires an argument of type string") }
 	ret Symbol(args[0])
 }
 
@@ -1463,7 +1463,12 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	print(eagleStyle.bgHex("#FF737F").fgName("black").bold().sprint("\n\n\n                        \n  Welcome to the REPL!  \n  Eagle Lisp v%v     \n                        \n\n\n".fmt(eagleLispVersion)))
+	var space = "\n\n" +" ".repeat(37)
+	var header = space + "\n   Welcome to the Eagle-Lisp REPL!   \n   v.%v".fmt(eagleLispVersion)
+	header = header + " ".repeat(27)
+	header = header + "\n   " + " ".repeat(34)
+	header = header + "\n\n"
+	print(eagleStyle.bgHex("#FF8A7B").fgName("black").bold().sprint(header))
 	var env = makeGlobalEnv()
 	var running = true
 	
@@ -1578,6 +1583,10 @@ repl(prompt)
 
 // (def gensym-counter (list 0))
 
-// (def gensym (lambda () (set! gensym-counter (list (+ (car gensym-counter) 1))) (string->symbol (++ "g$" (to-string (car gensym-counter))))))
+// (def gensym (lambda () (set! gensym-counter (list (+ (car gensym-counter) 1))) (make-symbol (++ "**S-y-M-b-O-l**" (to-string (car gensym-counter))))))
 
 // (defmacro my-or (a b) (let ((g (gensym))) `(let ((,g ,a)) (if ,g ,g ,b))))
+
+// (defmacro my-or2 (a b) `(let ((temp ,a)) (if temp temp ,b)))
+
+// (defmacro capture-check (val) `())
