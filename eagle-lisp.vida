@@ -1463,10 +1463,10 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	var space = "\n\n" +" ".repeat(37)
-	var header = space + "\n   Welcome to the Eagle-Lisp REPL!   \n   v.%v".fmt(eagleLispVersion)
-	header = header + " ".repeat(27)
-	header = header + "\n   " + " ".repeat(34)
+	var space = "\n\n" +" ".repeat(26)
+	var header = space + "\n   Welcome to the REPL!   \n   Eagle Lisp %v".fmt(eagleLispVersion)
+	header = header + " ".repeat(7)
+	header = header + "\n   " + " ".repeat(23)
 	header = header + "\n\n"
 	print(eagleStyle.bgHex("#FF8A7B").fgName("black").bold().sprint(header))
 	var env = makeGlobalEnv()
@@ -1589,4 +1589,11 @@ repl(prompt)
 
 // (defmacro my-or2 (a b) `(let ((temp ,a)) (if temp temp ,b)))
 
-// (defmacro capture-check (val) `())
+// (defmacro capture-check (val) `(let ((alpha ,val)) (print alpha)))
+
+// (defmacro my-and (. exprs) (cond ((null? exprs) #t) ((null? (cdr exprs)) (car exprs)) (else `(if ,(car exprs) (my-and ,@(cdr exprs)) #f))))
+
+// (defmacro my-or (. exprs) (cond ((null? exprs) #f) ((null? (cdr exprs)) (car exprs)) (else `(if ,(car exprs) #t (my-or ,@(cdr exprs))))))
+
+// (defmacro my-let (. bindings) (quote body) (cond ((null? bindings) nil)  body  )  )
+
