@@ -1,2 +1,2 @@
 # Eagle-lisp
-A little tiny lisp implemented in Vida
+A little tiny lisp interpreter implemented in Vida
