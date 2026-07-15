@@ -23,26 +23,7 @@ let intType = (42).type()
 let floatType = (0.5).type()
 let osName = os::name()
 let knownAtoms = [symbolType, nilType, strType, intType, floatType]
-let eagleLispVersion = "0.9.3"
-let specialForms = [
-	"if", 
-	"def", 
-	"defmacro", 
-	"quasiquote", 
-	"lambda", 
-	"quote", 
-	"begin", 
-	"cond", 
-	"let", 
-	"else", 
-	"set!", 
-	"and", 
-	"or", 
-	"load",
-	"nil",
-	"atom",
-	"print-env"
-]
+let eagleLispVersion = "0.9.4"
 let prompt = "> "
 let eagleStyle = style::new()
 
@@ -397,10 +378,25 @@ let symvt = {
 
 // Symbol builder
 let Symbol = fun sym {
-	if sym in specialForms {
-		ret sym
-	}
 	ret {symbol = sym} =< symvt
+}
+
+
+
+
+
+// Returns the "keyword name" of an AST node if it has one, else nil:
+// - a real Symbol -> its .symbol name
+// - a bare string (e.g. "quasiquote"/"unquote"/"unquote-splicing" nodes
+//   injected literally by readFrom's `/,/,@ sugar, or the "." dotted-pair
+//   sentinel) -> the string itself
+// - anything else (numbers, Pairs, arrays, NIL...) -> nil
+// This is how eval/expandQuasiquote recognize keyword position now,
+// instead of relying on parse-time string identity.
+let symName = fun node {
+	if node.type() == symbolType { ret node.symbol }
+	if node.type() == strType { ret node }
+	ret nil
 }
 
 
@@ -767,6 +763,12 @@ prelude["print"] = fun args... { print("\n"); print(" ", ...args); ret NIL }
 
 
 
+prelude["error"] = fun message -> error(message)
+
+
+
+
+
 prelude["to-string"] = fun args... {
 	if args.len() == 1 {
 		ret args[0].toString()
@@ -868,8 +870,8 @@ prelude["cdr"] = fun args... {
 
 
 
-prelude["null?"] = fun args... {
-	if args.len() != 1 { ret error("lambda 'null?' requires exactly 1 argument") }
+prelude["nil?"] = fun args... {
+	if args.len() != 1 { ret error("lambda 'nil?' requires exactly 1 argument") }
 	ret args[0].type() == nilType
 }
 
@@ -938,7 +940,7 @@ prelude["apply"] = fun args... {
 
 
 
-prelude["list-length"] = fun args... {
+prelude["length"] = fun args... {
 	if args.len() != 1 { ret error("lambda 'list-length' requires exactly 1 argument") }
 
 	if args[0].type() == strType { ret args[0].len() }
@@ -1139,16 +1141,16 @@ let expandQuasiquote = fun expr, env, depth {
 	if expr.type() != arrayType { ret expr }
 	if expr.isEmpty() { ret [] }
 
-	if expr[0] == "quasiquote" {
+	if symName(expr[0]) == "quasiquote" {
 		ret ["quasiquote", expandQuasiquote(expr[1], env, depth + 1)]
 	}
 
-	if expr[0] == "unquote" {
+	if symName(expr[0]) == "unquote" {
 		if depth == 0 { ret eval(expr[1], env) }
 		ret ["unquote", expandQuasiquote(expr[1], env, depth - 1)]
 	}
 
-	if expr[0] == "unquote-splicing" {
+	if symName(expr[0]) == "unquote-splicing" {
 		if depth == 0 { ret error("unquote-splicing used outside of list context") }
 		ret ["unquote-splicing", expandQuasiquote(expr[1], env, depth - 1)]
 	}
@@ -1159,7 +1161,7 @@ let expandQuasiquote = fun expr, env, depth {
 		var isSplice = false
 		if e.type() == arrayType {
 			if not e.isEmpty() {
-				if e[0] == "unquote-splicing" {
+				if symName(e[0]) == "unquote-splicing" {
 					if depth == 0 { isSplice = true }
 				}
 			}
@@ -1207,12 +1209,12 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "quote" {
+	else if symName(code[0]) == "quote" {
 		ret astToData(code[1])
 	}
 
 
-	else if code[0] == "begin" {
+	else if symName(code[0]) == "begin" {
         // Evaluates expressions in order, returns the last one
 		var res = nil
 		for _, e in code[1..] {
@@ -1222,11 +1224,11 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "cond" {
+	else if symName(code[0]) == "cond" {
 		for _, clause in code[1..] {
 			var testExpr = clause[0]
 
-			if testExpr == "else" {
+			if symName(testExpr) == "else" {
 				var res = nil
 				for _, expr in clause[1..] {
 					res = eval(expr, env)
@@ -1250,7 +1252,7 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "let" {
+	else if symName(code[0]) == "let" {
 		var bindings = code[1] // Expecting a list of lists
 		var localEnv = makeLetEnv(env)
 		
@@ -1279,7 +1281,7 @@ eval = fun code, env {
 	}
 
     
-	else if code[0] == "lambda" {
+	else if symName(code[0]) == "lambda" {
 		ret fun args... {
 			var lambdaEnv = makeFunctionEnv(code[1], args, env)
 			if lambdaEnv.isError() { ret lambdaEnv }
@@ -1293,7 +1295,7 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "defmacro" {
+	else if symName(code[0]) == "defmacro" {
 		if code[1].type() != symbolType {
 			ret error("expected a symbol after defmacro, got `%v`".fmt(code[1].type()))
 		}
@@ -1319,14 +1321,14 @@ eval = fun code, env {
 	}
 
 	
-	else if code[0] == "quasiquote" {
+	else if symName(code[0]) == "quasiquote" {
 		var expanded = expandQuasiquote(code[1], env, 0)
 		if expanded.isError() { ret expanded }
 		ret astToData(expanded)
 	}
 
 
-	else if code[0] == "def" {
+	else if symName(code[0]) == "def" {
 		if code[1].type() != symbolType {
 			ret error("expected a symbol after def, got `%v`".fmt(code[1].type()))
 		}
@@ -1336,7 +1338,7 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "if" {
+	else if symName(code[0]) == "if" {
 		var testVal = eval(code[1], env)
 		if testVal.isError() { ret testVal }
 		var exp = nil
@@ -1349,7 +1351,7 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "set!" {
+	else if symName(code[0]) == "set!" {
 		var key = code[1]
 		var val = eval(code[2], env)
 
@@ -1372,7 +1374,7 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "and" {
+	else if symName(code[0]) == "and" {
 		var res = true
 		for _, e in code[1..] {
 			res = eval(e, env)
@@ -1383,7 +1385,7 @@ eval = fun code, env {
 	}
 
 	
-	else if code[0] == "or" {
+	else if symName(code[0]) == "or" {
 		var res = false
 		for _, e in code[1..] {
 			res = eval(e, env)
@@ -1393,14 +1395,14 @@ eval = fun code, env {
 		ret false
 	}
 
-	else if code[0] == "atom" {
+	else if symName(code[0]) == "atom" {
 		if code[1].type() == symbolType {
 			ret true
 		}
 		ret isAtom(eval(code[1], env))
 	}
 
-	else if code[0] == "load" {
+	else if symName(code[0]) == "load" {
 		var path = eval(code[1], env)
 		var sourceCode = nil
 		
@@ -1419,12 +1421,12 @@ eval = fun code, env {
 	}
 
 
-	else if code[0] == "print-env" {
+	else if symName(code[0]) == "env" {
 		ret showEnv(env) // just for debugging
 	}
 
 
-	else if code[0] == "unquote" or code[0] == "unquote-splicing" {
+	else if symName(code[0]) == "unquote" or symName(code[0]) == "unquote-splicing" {
     	ret error("%v used outside of quasiquote".fmt(code[0]))
 	}
 
@@ -1476,7 +1478,7 @@ let repl = fun prompt {
 	header = header + " ".repeat(7)
 	header = header + "\n   " + " ".repeat(23)
 	header = header + "\n\n"
-	print(eagleStyle.bgHex("#FF93AC").fgName("black").bold().sprint(header))
+	print(eagleStyle.bgHex("#FFCBEF").fgName("black").bold().sprint(header))
 	var env = makeGlobalEnv()
 	var running = true
 	
@@ -1516,97 +1518,3 @@ let repl = fun prompt {
 
 // Everything starts here!
 repl(prompt)
-
-
-
-
-
-// Some exercises here ...
-
-// (def factorial (lambda (n) (if (= n 0) 1 (* n (factorial (- n 1)))))) (factorial 5) (factorial 10)
-
-// (def fib (lambda (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))) (fib 10) (fib 15)
-
-// (def classify (lambda (x) (cond ((< x 0) "Negative") ((= x 0) "Zero") (else "Positive")))) (print (classify 5))
-
-// (let ((x 10) (y 20)) (print "x is" x "and y is" y) (+ x y))
-
-// (def make-counter (lambda () (let ((count 0)) (lambda () (set! count (+ count 1)) count))))
-
-// (def c1 (make-counter)) (def c2 (make-counter))
-
-// (print "C1:" (c1) (c1) (c1)) (print "C2:" (c2) (c2))
-
-// (def my-list (list 1 2 3 4 5))
-
-// (print "First element:" (car my-list)) (print "The rest:" (cdr my-list)) (print "Prepend a zero:" (cons 0 my-list))
-
-// (def my-list (list 1 2 3 4 5))
-
-// (def double (lambda (x) (* x 2))) (print "Doubled:" (map double my-list))
-
-// (def is-even? (lambda (x) (= (% x 2) 0))) (print "Evens only:" (filter is-even? my-list))
-
-// (def add-three (lambda (a b c) (+ a (+ b c)))) (print "Applied:" (apply add-three (list 10 20 30)))
-
-// (print "Empty sum:" (+)) (print "Empty product:" (*))
-
-// ;; Unary Inverses (print "Negative 5:" (- 5)) (print "Reciprocal of 4:" (/ 4))
-
-// ;; Chaining Comparisons (print "Is 1 < 2 < 3?" (< 1 2 3)) (print "Is 5 = 5 = 5?" (= 5 5 5))
-
-// ;; Variadic Math (print "Sum:" (+ 1 2 3 4 5)) (print "Left-associative sub:" (- 100 10 5 2))
-
-// (def pythagoras (lambda (a b) (def a2 (* a a)) (def b2 (* b b)) (+ a2 b2)))
-
-// (print "Result; is:" (pythagoras 3 4))
-
-// (defmacro when (test . bodies) `(if ,test (begin ,@bodies)))
-
-// (when (> 5 3) (print "Five is greater than three") (print "Math works!") 42)
-
-// (def my-list (lambda (first . rest) (cons first rest)))
-
-// (print "Rest params:" (my-list 1 2 3))
-
-// (defmacro when (test . bodies) `(if ,test (begin ,@bodies)))
-
-// (when (> 5 3) (print "When macro works!") (print "Multiple body expressions too!") 42)
-
-// (defmacro my-list (. items) `(list ,@items))
-
-// (print (my-list 1 2 3))
-
-// (def log-with-prefix (lambda (prefix . messages) (map (lambda (msg) (print prefix ":" msg)) messages)))
-
-// (log-with-prefix "[INFO]" "Server started" "Listening on port 8080" "Ready!")
-
-// (def sum-to-acc (lambda (n acc) (if (eq n 0) acc (sum-to-acc (- n 1) (+ n acc)))))
-
-// (def mutate-outer (lambda () (let ((inner-var 20)) (set! outer-var 999) (set! inner-var 888) (list outer-var inner-var))))
-
-// (def make-adders (lambda () (list (let ((n 1)) (lambda () n)) (let ((n 2)) (lambda () n)) (let ((n 3)) (lambda () n)))))
-
-// (def mutate-outer (lambda () (let ((inner-var 20)) (set! outer-var 999) (set! inner-var 888) (list outer-var inner-var))))
-
-// (def gensym-counter (list 0))
-
-// (def gensym (lambda () (set! gensym-counter (list (+ (car gensym-counter) 1))) (make-symbol (++ "**S-y-M-b-O-l**" (to-string (car gensym-counter))))))
-
-// (defmacro my-or (a b) (let ((g (gensym))) `(let ((,g ,a)) (if ,g ,g ,b))))
-
-// (defmacro my-or2 (a b) `(let ((temp ,a)) (if temp temp ,b)))
-
-// (defmacro capture-check (val) `(let ((alpha ,val)) (print alpha)))
-
-// (defmacro my-and (. exprs) (cond ((null? exprs) #t) ((null? (cdr exprs)) (car exprs)) (else `(if ,(car exprs) (my-and ,@(cdr exprs)) #f))))
-
-// (defmacro my-or (. exprs) (cond ((null? exprs) #f) ((null? (cdr exprs)) (car exprs)) (else `(if ,(car exprs) #t (my-or ,@(cdr exprs))))))
-
-// (defmacro my-let (bindings . body) (let ((names (map car bindings)) (values (map (lambda (b) (car (cdr b))) bindings))) `((lambda ,names ,@body) ,@values)))
-
-// (defmacro aif (test then otherwise) `(let ((it ,test)) (if it ,then ,otherwise)))
-
-// (defmacro awhile (test . body) `(let ((loop nil)) (set! loop (lambda () (if ,test (begin ,@body (loop))))) (loop)))
-
-// (defmacro defstruct (name . fields) `(def ,(string->symbol (++ "make-" (symbol->string name))) (lambda ,fields (let ((s (make-dict))) ,@(map (lambda (f) `(dict-set s ,(symbol->string f) ,f)) fields) s))))
