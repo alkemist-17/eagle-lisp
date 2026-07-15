@@ -977,6 +977,13 @@ prelude["make-symbol"] = fun args... {
 
 
 
+prelude["string->symbol"] = fun args... {
+	ret prelude["make-symbol"](...args)
+}
+
+
+
+
 
 prelude["symbol->string"] = fun args... {
 	if args.len() != 1 { ret error("lambda 'symbol->string' requires exactly 1 argument") }
@@ -1432,7 +1439,8 @@ eval = fun code, env {
 		// Macro expansion engine
 		if proc.type() == macroType {
 			// Pass raw, unevaluated ASTs to the macro
-			var rawArgs = code[1..]
+			var rawArgs = []
+			for _, a in code[1..] { rawArgs.append(astToData(a)) }
 			
 			// Execute the macro to get the transformed code
 			var expandedCode = proc::macroFn(...rawArgs)
@@ -1468,7 +1476,7 @@ let repl = fun prompt {
 	header = header + " ".repeat(7)
 	header = header + "\n   " + " ".repeat(23)
 	header = header + "\n\n"
-	print(eagleStyle.bgHex("#FF8A7B").fgName("black").bold().sprint(header))
+	print(eagleStyle.bgHex("#FF93AC").fgName("black").bold().sprint(header))
 	var env = makeGlobalEnv()
 	var running = true
 	
@@ -1595,5 +1603,10 @@ repl(prompt)
 
 // (defmacro my-or (. exprs) (cond ((null? exprs) #f) ((null? (cdr exprs)) (car exprs)) (else `(if ,(car exprs) #t (my-or ,@(cdr exprs))))))
 
-// (defmacro my-let (. bindings) (quote body) (cond ((null? bindings) nil)  body  )  )
+// (defmacro my-let (bindings . body) (let ((names (map car bindings)) (values (map (lambda (b) (car (cdr b))) bindings))) `((lambda ,names ,@body) ,@values)))
 
+// (defmacro aif (test then otherwise) `(let ((it ,test)) (if it ,then ,otherwise)))
+
+// (defmacro awhile (test . body) `(let ((loop nil)) (set! loop (lambda () (if ,test (begin ,@body (loop))))) (loop)))
+
+// (defmacro defstruct (name . fields) `(def ,(string->symbol (++ "make-" (symbol->string name))) (lambda ,fields (let ((s (make-dict))) ,@(map (lambda (f) `(dict-set s ,(symbol->string f) ,f)) fields) s))))
