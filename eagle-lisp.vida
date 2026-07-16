@@ -350,7 +350,7 @@ let showEnv = fun env {
 
 
 let tokenize = fun s {
-    var rawTokens = re::findAll(`[()]|,@|,|"(?:\\.|[^"\\])*"|;[^\n]*|\.|[^\s()]+`, s, -1)
+    var rawTokens = re::findAll(`[()]|,@|,|` + "`" + `|'|"(?:\\.|[^"\\])*"|;[^\n]*|\.|[^\s()]+`, s, -1)
     var tokens = []
 	if rawTokens {
 		for _, t in rawTokens {
@@ -449,6 +449,10 @@ let readFrom = fun tokens {
 	
 	if tok == "`" {
 		ret ["quasiquote", readFrom(tokens)]
+	}
+
+	if tok == "'" {
+		ret ["quote", readFrom(tokens)]
 	}
 
 	if tok == "," {
