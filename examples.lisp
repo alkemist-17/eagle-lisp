@@ -85,3 +85,9 @@
 ;; (defmacro awhile (test . body) `(let ((loop nil)) (set! loop (lambda () (if ,test (begin ,@body (loop))))) (loop)))
 
 ;; (defmacro defstruct (name . fields) `(def ,(string->symbol (++ "make-" (symbol->string name))) (lambda ,fields (let ((s (make-dict))) ,@(map (lambda (f) `(dict-set s ,(symbol->string f) ,f)) fields) s))))
+
+;; (def remove-if (lambda (f xs) (if (null? xs) nil (if (f (car xs)) (remove-if f (cdr xs)) (cons (car xs) (remove-if f (cdr xs)))))))
+
+;; (def is-even (lambda (x) (eq (% x 2) 0)))
+
+;; (remove-if is-even (list 1 2 3 4 5 6 7 8 9))

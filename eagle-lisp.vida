@@ -885,6 +885,15 @@ prelude["nil?"] = fun args... {
 
 
 
+prelude["null?"] = fun args... {
+	if args.len() != 1 { ret error("lambda 'nil?' requires exactly 1 argument") }
+	ret args[0].type() == nilType
+}
+
+
+
+
+
 prelude["map"] = fun args... {
 	if args.len() != 2 { ret error("lambda 'map' requires exactly 2 arguments") }
 	var proc = args[0]
