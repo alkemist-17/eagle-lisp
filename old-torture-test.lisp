@@ -229,9 +229,9 @@
 ;; expect: (2 3 4 5)
 (cdr lst)
 ;; expect: #t
-(null? (list))
+(nil? (list))
 ;; expect: #f
-(null? lst)
+(nil? lst)
 ;; expect: nil (car of empty list, per this interpreter's semantics)
 (car (list))
 ;; expect: nil (cdr of empty list)
@@ -294,7 +294,7 @@
 
 ;; falsiness of nil vs #f -- both should be falsy in `if`.
 ;; expect: "nil-is-truthy"
-(if nil "nil-is-falsy" "nil-is-truthy")
+(if nil "nil-is-falsy" "nil-is-not-truthy")
 ;; expect: "zero-is-truthy" (0 should NOT be falsy in most lisps --
 ;; worth confirming this interpreter agrees)
 (if 0 "zero-is-truthy" "zero-is-falsy")
@@ -340,7 +340,7 @@
 ;; expect: "hello 42" (non-string args auto-stringified)
 (++ "hello " 42)
 ;; expect: 5
-(list-length "hello")
+(length "hello")
 ;; string containing lisp-significant characters -- parser stress.
 ;; expect: "(parens) \"nested-quotes\" ; semicolon"
 "(parens) \"nested-quotes\" ; semicolon"
@@ -349,14 +349,14 @@
 (print "before;after")
 ;; empty string edge cases.
 ;; expect: 0
-(list-length "")
+(length "")
 
 
 ;; ------------------------------------------------------------
 ;; 10. DICT / OBJECT OPS
 ;; ------------------------------------------------------------
 
-(def d (dict-new))
+(def d (make-dict))
 (def d (dict-set d "a" 1))
 (def d (dict-set d "b" 2))
 ;; expect: 1
