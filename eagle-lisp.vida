@@ -757,7 +757,13 @@ prelude["%"] = fun args... {
 
 
 
-prelude["print"] = fun args... { print("\n"); print(" ", ...args); ret NIL }
+prelude["print"] = fun args... {
+	print("\n")
+	var strs = []
+	for _, a in args { strs.append(a.toString()) }
+	print(" ", ...strs)
+	ret NIL
+}
 
 
 
