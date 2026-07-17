@@ -24,7 +24,7 @@ let floatType = (0.5).type()
 let osName = os::name()
 let knownAtoms = [symbolType, nilType, strType, intType, floatType]
 let eagleLispVersion = "0.9.4"
-let prompt = "> "
+let prompt = " 🢜 "
 let eagleStyle = style::new()
 
 
@@ -171,7 +171,7 @@ let pairForEach = fun lst, fn {
 
 
 // Temporaty migration helper functions
-// arrayToList([1,2,3])       -> (1 2 3)
+// arrayToList([1,2,3])         -> (1 2 3)
 // arrayToList([1,2], someTail) -> (1 2 . someTail)  -- for dotted reads later
 let arrayToList = fun arr, tail {
 	var result = tail
@@ -421,7 +421,12 @@ let atom = fun token {
 	if token == "nil" { ret NIL }
 
 	if token.hasPrefix(`"`) and token.hasSuffix(`"`) {
+		// This is just a temporal workaround and it will fixed soon.
 		ret token[1..-1]
+			.replace(`\n`, "\n", -1)
+			.replace(`\r`, "\r", -1)
+			.replace(`\t`, "\t", -1)
+			.replace(`\v`, "\v", -1)
 	}
 	if token == "#f" {
 		ret false
@@ -765,7 +770,7 @@ prelude["print"] = fun args... {
 	print("\n")
 	var strs = []
 	for _, a in args { strs.append(a.toString()) }
-	print(" ", ...strs)
+	print("  ", ...strs)
 	ret NIL
 }
 
@@ -1468,7 +1473,11 @@ eval = fun code, env {
 			if expandedCode.isError() { ret expandedCode }
 			
 			// Evaluate the new generated code at runtime in the current environment
-			ret eval(dataToAst(expandedCode), env)
+			var result = eval(dataToAst(expandedCode), env)
+			if result.isNil() {
+				ret NIL
+			}
+			ret result
 		}
 		
 		if proc.type() == "function" or proc.type() == "nativeFunction" {
@@ -1478,7 +1487,11 @@ eval = fun code, env {
 				if v.isError() { ret v }
 				vals.append(v)
 			}
-			ret proc(...vals)
+			var result = proc(...vals)
+			if result.isNil() {
+				ret NIL
+			}
+			ret result
 		}
 		
 		ret error("value `%v` is not a lambda expression".fmt(code[0].toString()))
@@ -1492,17 +1505,18 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
+	var backgrondColor = "#00FA9A"
 	var space = "\n\n" +" ".repeat(26)
-	var header = space + "\n   Welcome to the REPL!   \n   Eagle Lisp %v".fmt(eagleLispVersion)
-	header = header + " ".repeat(7)
+	var header = space + "\n   Welcome to the REPL!   \n   Eagle %v".fmt(eagleLispVersion)
+	header = header + " ".repeat(12)
 	header = header + "\n   " + " ".repeat(23)
 	header = header + "\n\n"
-	print(eagleStyle.bgHex("#FFCBEF").fgName("black").bold().sprint(header))
+	print(eagleStyle.bgHex(backgrondColor).fgName("black").bold().sprint(header))
 	var env = makeGlobalEnv()
 	var running = true
 	
 	while running {
-		var userInput = input(prompt)
+		var userInput = input(eagleStyle.fgHex(backgrondColor).bold().sprint(prompt))
 
 		
 		if userInput.trim().toLower() in ["exit", "quit", "(exit)", "(quit)"] {
@@ -1526,7 +1540,7 @@ let repl = fun prompt {
 		// Evaluate and print the result of each expression
 		// This is one of the list procesor (lisp) part
 		for _, expr in ast {
-			print("\n\n  %v\n\n".fmt(eval(expr, env).toString()))
+			print("\n\n   %v\n\n".fmt(eval(expr, env).toString()))
 		}
 	}
 }
