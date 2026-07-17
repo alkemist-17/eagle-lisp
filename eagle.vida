@@ -1505,18 +1505,18 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	var backgrondColor = "#00FA9A"
+	var eagleColor = "#87FFBF"
 	var space = "\n\n" +" ".repeat(26)
 	var header = space + "\n   Welcome to the REPL!   \n   Eagle %v".fmt(eagleLispVersion)
 	header = header + " ".repeat(12)
 	header = header + "\n   " + " ".repeat(23)
 	header = header + "\n\n"
-	print(eagleStyle.bgHex(backgrondColor).fgName("black").bold().sprint(header))
+	print(eagleStyle.bgHex(eagleColor).fgName("black").bold().sprint(header))
 	var env = makeGlobalEnv()
 	var running = true
 	
 	while running {
-		var userInput = input(eagleStyle.fgHex(backgrondColor).bold().sprint(prompt))
+		var userInput = input(eagleStyle.fgHex(eagleColor).bold().sprint(prompt))
 
 		
 		if userInput.trim().toLower() in ["exit", "quit", "(exit)", "(quit)"] {
