@@ -206,70 +206,34 @@ let listToArray = fun lst {
 
 
 
-// Converts a raw parsed AST node into Pair-based data.
-let astToData = fun node {
-	if node.type() != arrayType {
-		ret node   // atoms pass through unchanged
-	}
-
-	if node.isEmpty() {
-		ret NIL
-	}
-
-	// Find a top-level "." and treat everything after it as the tail
-	var dotIndex = -1
+// nth(lst, n) -- the n-th element (0-indexed) of a proper or dotted Pair
+// chain. Replaces code[n] array indexing now that eval walks Pairs
+// directly. Gracefully returns NIL if the chain is shorter than n (car/cdr
+// of NIL is NIL), or an error if it runs into a genuinely malformed
+// (non-pair, non-nil) tail partway through -- same contract pairCar/pairCdr
+// already have.
+let nth = fun lst, n {
+	var current = lst
 	var i = 0
-	for _, item in node {
-		if item == "." {
-			dotIndex = i
-		}
+	while i < n {
+		current = pairCdr(current)
+		if current.isError() { ret current }
 		i = i + 1
 	}
-
-	if dotIndex == -1 {
-		// Proper list: recursively convert each element, tail is NIL
-		var result = NIL
-		var j = node.len() - 1
-		while j >= 0 {
-			result = Pair(astToData(node[j]), result)
-			j = j - 1
-		}
-		ret result
-	}
-
-	// Dotted: node[dotIndex] is the "." sentinel itself, so the real
-	// tail is node[dotIndex + 1], and the head elements are everything
-	// before dotIndex.
-	var tail = astToData(node[dotIndex + 1])
-	var j = dotIndex - 1
-	while j >= 0 {
-		tail = Pair(astToData(node[j]), tail)
-		j = j - 1
-	}
-	ret tail
+	ret pairCar(current)
 }
 
-
-
-
-// Converts real Pair-based data back into array-shaped AST, so
-// quasiquote-generated macro bodies can be fed back into eval,
-// which only understands array-shaped code. Inverse of astToData.
-let dataToAst = fun data {
-	if data.type() != pairType {
-		ret data   // atoms pass here
+// drop(lst, n) -- the tail of a Pair chain after dropping n elements (n
+// applications of cdr). Replaces code[n..] array slicing.
+let drop = fun lst, n {
+	var current = lst
+	var i = 0
+	while i < n {
+		current = pairCdr(current)
+		if current.isError() { ret current }
+		i = i + 1
 	}
-	var out = []
-	var current = data
-	while current.type() == pairType {
-		out.append(dataToAst(current.car))
-		current = current.cdr
-	}
-	if current.type() != nilType {
-		out.append(".")
-		out.append(dataToAst(current))
-	}
-	ret out
+	ret current
 }
 
 
@@ -453,19 +417,19 @@ let readFrom = fun tokens {
 	var tok = tokens.remove(0)
 	
 	if tok == "`" {
-		ret ["quasiquote", readFrom(tokens)]
+		ret arrayToList(["quasiquote", readFrom(tokens)], nil)
 	}
 
 	if tok == "'" {
-		ret ["quote", readFrom(tokens)]
+		ret arrayToList(["quote", readFrom(tokens)], nil)
 	}
 
 	if tok == "," {
-		ret ["unquote", readFrom(tokens)]
+		ret arrayToList(["unquote", readFrom(tokens)], nil)
 	}
 
 	if tok == ",@" {
-		ret ["unquote-splicing", readFrom(tokens)]
+		ret arrayToList(["unquote-splicing", readFrom(tokens)], nil)
 	}
 
 	if tok == "(" {
@@ -476,15 +440,14 @@ let readFrom = fun tokens {
         }
 
 		var L = []
+		var tail = nil
 		while not (tokens[0].isNil()) and tokens[0] != ")" {
 			if tokens[0] == "." {
 				tokens.remove(0)
 				if tokens.isEmpty() or tokens[0] == ")" {
 					ret error("unexpected end after dot")
 				}
-				var cdr = readFrom(tokens)
-				L.append(".")
-				L.append(cdr)
+				tail = readFrom(tokens)
 				if tokens.isEmpty() or tokens[0] != ")" {
 					ret error("expected ')' after dotted pair")
 				}
@@ -496,7 +459,7 @@ let readFrom = fun tokens {
     		ret error("unexpected EOF while reading list, expected ')'")
 		}
 		tokens.remove(0)
-		ret L
+		ret arrayToList(L, tail)
 	}
 
 	else if tok == ")" {
@@ -1101,37 +1064,17 @@ let makeFunctionEnv = fun parms, args, outer {
 		env.set(parms.symbol, arrayToList(args, nil))
 		ret env
 	}
-	
-	var i = 0
-	var foundDot = false
-	
-	for _, p in parms {
-		if p == "." {
-			foundDot = true
-			continue
-		}
-		
-		if foundDot {
-			var restArgs = []
-			while i < args.len() {
-				restArgs.append(args[i])
-				i = i + 1
-			}
-			
-			if p.type() == symbolType {
-				env.set(p.symbol, arrayToList(restArgs, nil))
-			} else {
-				env.set(p, arrayToList(restArgs, nil))
-			}
 
-			break
-		}
-		
-		// unchanged below
+	var i = 0
+	var current = parms
+
+	while current.type() == pairType {
+		var p = current.car
+
 		if i >= args.len() {
 			ret error("not enough arguments for parameter `%v`".fmt(p.toString()))
 		}
-		
+
 		if p.type() == symbolType {
 			env.set(p.symbol, args[i])
 		} else {
@@ -1139,12 +1082,32 @@ let makeFunctionEnv = fun parms, args, outer {
 		}
 
 		i = i + 1
+		current = current.cdr
 	}
-	
-	if not foundDot and i < args.len() {
-		ret error("too many arguments: expected %v, got %v".fmt(parms.len(), args.len()))
+
+	// current is now the tail: NIL for a fixed-arity parameter list, or
+	// a bare symbol (dotted parameter list, e.g. (x y . rest)) that
+	// should collect every remaining argument.
+	if current.type() != nilType {
+		var restArgs = []
+		while i < args.len() {
+			restArgs.append(args[i])
+			i = i + 1
+		}
+
+		if current.type() == symbolType {
+			env.set(current.symbol, arrayToList(restArgs, nil))
+		} else {
+			env.set(current, arrayToList(restArgs, nil))
+		}
+
+		ret env
 	}
-	
+
+	if i < args.len() {
+		ret error("too many arguments: expected %v, got %v".fmt(i, args.len()))
+	}
+
 	ret env
 }
 
@@ -1159,54 +1122,89 @@ let eval = nil
 
 
 
-// Recursively expands `,x` (unquote) and `,@x` (splicing)
-// This function returns ASTs
+// Recursively expands `,x` (unquote) and `,@x` (splicing).
+// This function now walks and returns Pair-based data directly.
 let expandQuasiquote = fun expr, env, depth {
-	if expr.type() != arrayType { ret expr }
-	if expr.isEmpty() { ret [] }
+	if expr.type() != pairType { ret expr }
 
-	if symName(expr[0]) == "quasiquote" {
-		ret ["quasiquote", expandQuasiquote(expr[1], env, depth + 1)]
+	if symName(pairCar(expr)) == "quasiquote" {
+		var inner = expandQuasiquote(nth(expr, 1), env, depth + 1)
+		if inner.isError() { ret inner }
+		ret arrayToList(["quasiquote", inner], nil)
 	}
 
-	if symName(expr[0]) == "unquote" {
-		if depth == 0 { ret eval(expr[1], env) }
-		ret ["unquote", expandQuasiquote(expr[1], env, depth - 1)]
+	if symName(pairCar(expr)) == "unquote" {
+		if depth == 0 { ret eval(nth(expr, 1), env) }
+		var inner = expandQuasiquote(nth(expr, 1), env, depth - 1)
+		if inner.isError() { ret inner }
+		ret arrayToList(["unquote", inner], nil)
 	}
 
-	if symName(expr[0]) == "unquote-splicing" {
+	if symName(pairCar(expr)) == "unquote-splicing" {
 		if depth == 0 { ret error("unquote-splicing used outside of list context") }
-		ret ["unquote-splicing", expandQuasiquote(expr[1], env, depth - 1)]
+		var inner = expandQuasiquote(nth(expr, 1), env, depth - 1)
+		if inner.isError() { ret inner }
+		ret arrayToList(["unquote-splicing", inner], nil)
 	}
 
-	var res = []
-	
-	for _, e in expr {
+	// General case: walk expr's Pair chain element by element, splicing
+	// where needed.
+	var items = []
+	var current = expr
+
+	while current.type() == pairType {
+		// A dotted quasiquote-template tail like `(a . ,b) reads, after
+		// ordinary dotted-pair flattening, as the flat Pair chain
+		// (a unquote b) -- `(a . ,b) and `(a unquote b) are the exact
+		// same parsed data, by the same equivalence any Lisp reader's
+		// dotted notation gives: (a . (X . (Y . nil))) IS (a X Y).
+		// Recognize that shape here (an "unquote" sitting directly as
+		// the current tail's own car, not nested one level down inside
+		// an element) and treat it as the genuine dotted tail --
+		// evaluating/re-wrapping just its argument -- instead of
+		// walking "unquote" and the argument as two more ordinary
+		// list elements.
+		if symName(pairCar(current)) == "unquote" {
+			if depth == 0 {
+				var tailVal = eval(nth(current, 1), env)
+				if tailVal.isError() { ret tailVal }
+				ret arrayToList(items, tailVal)
+			}
+			var wrappedInner = expandQuasiquote(nth(current, 1), env, depth - 1)
+			if wrappedInner.isError() { ret wrappedInner }
+			ret arrayToList(items, arrayToList(["unquote", wrappedInner], nil))
+		}
+
+		var e = current.car
 		var isSplice = false
-		if e.type() == arrayType {
-			if not e.isEmpty() {
-				if symName(e[0]) == "unquote-splicing" {
-					if depth == 0 { isSplice = true }
-				}
+
+		if e.type() == pairType {
+			if symName(pairCar(e)) == "unquote-splicing" {
+				if depth == 0 { isSplice = true }
 			}
 		}
 
 		if isSplice {
-			var spliced = eval(e[1], env)
+			var spliced = eval(nth(e, 1), env)
 			if not (spliced.type() == pairType or spliced.type() == nilType) {
     			ret error("unquote-splicing target must be a proper list, got `%v`".fmt(spliced.type()))
 			}
 			var sourceArr = listToArray(spliced)
 			if sourceArr.isError() { ret sourceArr }
-			for _, item in sourceArr { res.append(item) }
+			for _, item in sourceArr { items.append(item) }
 		} else {
 			var expanded = expandQuasiquote(e, env, depth)
     		if expanded.isError() { ret expanded }
-    		res.append(expanded)
+    		items.append(expanded)
 		}
+
+		current = current.cdr
 	}
 
-	ret res
+	var tail = expandQuasiquote(current, env, depth)
+	if tail.isError() { ret tail }
+
+	ret arrayToList(items, tail)
 }
 
 
@@ -1222,41 +1220,41 @@ eval = fun code, env {
 	}
 
 
-	else if code.type() != arrayType {
+	else if code.type() != pairType {
 		ret code
 	}
 
 
-    // Safety check for empty lists
-	else if code.isEmpty() {
-		ret NIL
+	else if symName(pairCar(code)) == "quote" {
+		ret nth(code, 1)
 	}
 
 
-	else if symName(code[0]) == "quote" {
-		ret astToData(code[1])
-	}
-
-
-	else if symName(code[0]) == "begin" {
+	else if symName(pairCar(code)) == "begin" {
         // Evaluates expressions in order, returns the last one
-		var res = NIL
-		for _, e in code[1..] {
-			res = eval(e, env)
+		var res = nil
+		var rest = drop(code, 1)
+		while rest.type() == pairType {
+			res = eval(rest.car, env)
+			rest = rest.cdr
 		}
 		ret res
 	}
 
 
-	else if symName(code[0]) == "cond" {
-		for _, clause in code[1..] {
-			var testExpr = clause[0]
+	else if symName(pairCar(code)) == "cond" {
+		var clauses = drop(code, 1)
+		while clauses.type() == pairType {
+			var clause = clauses.car
+			var testExpr = pairCar(clause)
 
 			if symName(testExpr) == "else" {
-				var res = NIL
-				for _, expr in clause[1..] {
-					res = eval(expr, env)
+				var res = nil
+				var body = pairCdr(clause)
+				while body.type() == pairType {
+					res = eval(body.car, env)
 					if res.isError() { ret res }
+					body = body.cdr
 				}
 				ret res
 			}
@@ -1264,77 +1262,90 @@ eval = fun code, env {
 			var testResult = eval(testExpr, env)
 			if testResult.isError() { ret testResult }
 			if testResult {
-				var res = NIL
-				for _, expr in clause[1..] {
-					res = eval(expr, env)
+				var res = nil
+				var body = pairCdr(clause)
+				while body.type() == pairType {
+					res = eval(body.car, env)
 					if res.isError() { ret res }
+					body = body.cdr
 				}
 				ret res
 			}
+
+			clauses = clauses.cdr
 		}
-		ret NIL
+		ret nil
 	}
 
 
-	else if symName(code[0]) == "let" {
-		var bindings = code[1] // Expecting a list of lists here
+	else if symName(pairCar(code)) == "let" {
+		var bindings = nth(code, 1) // Expecting a list of (name value) pairs
 		var localEnv = makeLetEnv(env)
-		
-		for _, binding in bindings {
-			if not (binding.type() == arrayType or binding.len() == 2) {
+
+		var b = bindings
+		while b.type() == pairType {
+			var binding = b.car
+			if binding.type() != pairType {
         		ret error("let: malformed binding `%v`, expected (name value)".fmt(binding.toString()))
     		}
 
-			var name = binding[0]
-			var val = eval(binding[1], env) 
-			
+			var name = pairCar(binding)
+			var val = eval(nth(binding, 1), env)
+
 			if name.type() == symbolType {
 				localEnv.set(name.symbol, val)
 			} else {
 				localEnv.set(name, val)
 			}
+
+			b = b.cdr
 		}
-		
-		var res = NIL
-		
-		for _, expr in code[2..] {
-			res = eval(expr, localEnv)
+
+		var res = nil
+		var body = drop(code, 2)
+		while body.type() == pairType {
+			res = eval(body.car, localEnv)
+			body = body.cdr
 		}
 
 		ret res
 	}
 
     
-	else if symName(code[0]) == "lambda" {
+	else if symName(pairCar(code)) == "lambda" {
 		ret fun args... {
-			var lambdaEnv = makeFunctionEnv(code[1], args, env)
+			var lambdaEnv = makeFunctionEnv(nth(code, 1), args, env)
 			if lambdaEnv.isError() { ret lambdaEnv }
-			var res = NIL
-			for _, e in code[2..] {
-				res = eval(e, lambdaEnv)
+			var res = nil
+			var body = drop(code, 2)
+			while body.type() == pairType {
+				res = eval(body.car, lambdaEnv)
 				if res.isError() { ret res }
+				body = body.cdr
 			}
 			ret res
 		}
 	}
 
 
-	else if symName(code[0]) == "defmacro" {
-		if code[1].type() != symbolType {
-			ret error("expected a symbol after defmacro, got `%v`".fmt(code[1].type()))
+	else if symName(pairCar(code)) == "defmacro" {
+		if nth(code, 1).type() != symbolType {
+			ret error("expected a symbol after defmacro, got `%v`".fmt(nth(code, 1).type()))
 		}
 		
-		var name = code[1].symbol
-		var params = code[2]
-		var body = code[3..]
+		var name = nth(code, 1).symbol
+		var params = nth(code, 2)
+		var body = drop(code, 3)
 		
 		var macroFn = fun args... {
 			var macroEnv = makeFunctionEnv(params, args, env)
 			if macroEnv.isError() { ret macroEnv }
-			var res = NIL
-			for _, e in body {
-				res = eval(e, macroEnv)
+			var res = nil
+			var b = body
+			while b.type() == pairType {
+				res = eval(b.car, macroEnv)
 				if res.isError() { ret res }
+				b = b.cdr
 			}
 			ret res
 		}
@@ -1345,39 +1356,37 @@ eval = fun code, env {
 	}
 
 	
-	else if symName(code[0]) == "quasiquote" {
-		var expanded = expandQuasiquote(code[1], env, 0)
-		if expanded.isError() { ret expanded }
-		ret astToData(expanded)
+	else if symName(pairCar(code)) == "quasiquote" {
+		ret expandQuasiquote(nth(code, 1), env, 0)
 	}
 
 
-	else if symName(code[0]) == "def" {
-		if code[1].type() != symbolType {
-			ret error("expected a symbol after def, got `%v`".fmt(code[1].type()))
+	else if symName(pairCar(code)) == "def" {
+		if nth(code, 1).type() != symbolType {
+			ret error("expected a symbol after def, got `%v`".fmt(nth(code, 1).type()))
 		}
-		var name = code[1].symbol 
-		env.set(name, eval(code[2], env))
+		var name = nth(code, 1).symbol
+		env.set(name, eval(nth(code, 2), env))
 		ret env[name]
 	}
 
 
-	else if symName(code[0]) == "if" {
-		var testVal = eval(code[1], env)
+	else if symName(pairCar(code)) == "if" {
+		var testVal = eval(nth(code, 1), env)
 		if testVal.isError() { ret testVal }
-		var exp = NIL
+		var exp = nil
         if testVal.type() != nilType and testVal != false {
-            exp = code[2]
+            exp = nth(code, 2)
         } else {
-            exp = code[3]
+            exp = nth(code, 3)
         }
         ret eval(exp, env)
 	}
 
 
-	else if symName(code[0]) == "set!" {
-		var key = code[1]
-		var val = eval(code[2], env)
+	else if symName(pairCar(code)) == "set!" {
+		var key = nth(code, 1)
+		var val = eval(nth(code, 2), env)
 
 		if key.type() != symbolType {
 			ret error("expected a symbol after set!, got `%v`".fmt(key))
@@ -1398,37 +1407,41 @@ eval = fun code, env {
 	}
 
 
-	else if symName(code[0]) == "and" {
+	else if symName(pairCar(code)) == "and" {
 		var res = true
-		for _, e in code[1..] {
-			res = eval(e, env)
+		var rest = drop(code, 1)
+		while rest.type() == pairType {
+			res = eval(rest.car, env)
 			if res.isError() { ret res }
 			if not res { ret false }
+			rest = rest.cdr
 		}
 		ret res
 	}
 
 	
-	else if symName(code[0]) == "or" {
+	else if symName(pairCar(code)) == "or" {
 		var res = false
-		for _, e in code[1..] {
-			res = eval(e, env)
+		var rest = drop(code, 1)
+		while rest.type() == pairType {
+			res = eval(rest.car, env)
 			if res.isError() { ret res }
 			if res { ret res }
+			rest = rest.cdr
 		}
 		ret false
 	}
 
-	else if symName(code[0]) == "atom" {
-		if code[1].type() == symbolType {
+	else if symName(pairCar(code)) == "atom" {
+		if nth(code, 1).type() == symbolType {
 			ret true
 		}
-		ret isAtom(eval(code[1], env))
+		ret isAtom(eval(nth(code, 1), env))
 	}
 
-	else if symName(code[0]) == "load" {
-		var path = eval(code[1], env)
-		var sourceCode = NIL
+	else if symName(pairCar(code)) == "load" {
+		var path = eval(nth(code, 1), env)
+		var sourceCode = nil
 		
 		if io::exists(path) {
 			sourceCode = io::readFile(path)
@@ -1437,7 +1450,7 @@ eval = fun code, env {
 		}
 		
 		var asts = parse(sourceCode)
-		var res = NIL
+		var res = nil
 		for _, expr in asts {
 			res = eval(expr, env)
 		}
@@ -1445,18 +1458,18 @@ eval = fun code, env {
 	}
 
 
-	else if symName(code[0]) == "env" {
+	else if symName(pairCar(code)) == "env" {
 		ret showEnv(env) // just for debugging
 	}
 
 
-	else if symName(code[0]) == "unquote" or symName(code[0]) == "unquote-splicing" {
-    	ret error("%v used outside of quasiquote".fmt(code[0]))
+	else if symName(pairCar(code)) == "unquote" or symName(pairCar(code)) == "unquote-splicing" {
+    	ret error("%v used outside of quasiquote".fmt(pairCar(code)))
 	}
 
 
 	else {
-		var proc = eval(code[0], env)
+		var proc = eval(pairCar(code), env)
 		
 		if proc.isError() {
 			ret proc
@@ -1464,37 +1477,37 @@ eval = fun code, env {
 
 		// Macro expansion engine
 		if proc.type() == macroType {
-			// Pass raw, unevaluated ASTs to the macro
+			// Pass raw, unevaluated Pair-data to the macro -- code[1..]
+			// IS already Pair-shaped data now, no conversion needed.
 			var rawArgs = []
-			for _, a in code[1..] { rawArgs.append(astToData(a)) }
+			var a = drop(code, 1)
+			while a.type() == pairType {
+				rawArgs.append(a.car)
+				a = a.cdr
+			}
 			
 			// Execute the macro to get the transformed code
 			var expandedCode = proc::macroFn(...rawArgs)
 			if expandedCode.isError() { ret expandedCode }
 			
-			// Evaluate the new generated code at runtime in the current environment
-			var result = eval(dataToAst(expandedCode), env)
-			if result.isNil() {
-				ret NIL
-			}
-			ret result
+			// Evaluate the expansion directly -- it's already eval-shaped
+			// Pair data, no seam back to array-shaped AST needed.
+			ret eval(expandedCode, env)
 		}
 		
 		if proc.type() == "function" or proc.type() == "nativeFunction" {
 			var vals = []
-			for _, e in code[1..] {
-				var v = eval(e, env)
+			var e = drop(code, 1)
+			while e.type() == pairType {
+				var v = eval(e.car, env)
 				if v.isError() { ret v }
 				vals.append(v)
+				e = e.cdr
 			}
-			var result = proc(...vals)
-			if result.isNil() {
-				ret NIL
-			}
-			ret result
+			ret proc(...vals)
 		}
 		
-		ret error("value `%v` is not a lambda expression".fmt(code[0].toString()))
+		ret error("value `%v` is not a lambda expression".fmt(pairCar(code).toString()))
 	}
 }
 
@@ -1505,7 +1518,7 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	var eagleColor = "#87FFBF"
+	var eagleColor = "#FFADAD"
 	var space = "\n\n" +" ".repeat(26)
 	var header = space + "\n   Welcome to the REPL!   \n   Eagle %v".fmt(eagleLispVersion)
 	header = header + " ".repeat(12)
