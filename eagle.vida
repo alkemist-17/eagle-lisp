@@ -6,12 +6,20 @@
 
 
 
+// Modules
 let text = load("std.text")
 let style = load("std.style")
 let re = load("std.re")
 let exception = load("std.exception")
 let os = load("std.os")
 let io = load("std.io")
+let builders = load("std.builders")
+
+
+
+
+
+// Module level values
 let symbolType = "Symbol"
 let nilType = "Nil"
 let pairType = "Pair"
@@ -30,7 +38,14 @@ let eagleStyle = style::new()
 
 
 
+
+// Error vtable
 let errvt = (error()).getvt()
+
+
+
+
+
 errvt.toString = fun self {
 	ret "error: %v".fmt(self.message)
 }
@@ -39,7 +54,7 @@ errvt.toString = fun self {
 
 
 
-// lisp nil
+// lisp nil vtable
 let nilvt = {
 	type = fun self -> nilType
 	toString = fun self -> "NIL"
@@ -56,11 +71,11 @@ let NIL = {} =< nilvt
 
 
 // Lisp Pair
-// ============================================================
+// =================================================================
 // Pair — The list primitive
 // A proper list is:  NIL or Pair(x, <proper list>)
 // A dotted pair is:  Pair(x, <anything that isn't NIL or a Pair>)
-// ============================================================
+// =================================================================
 
 
 
@@ -71,13 +86,14 @@ let pairvt = {
 	type = fun self -> pairType
 
 	toString = fun self {
-		var out = "("
+		var sb = builders::new(strType)
+		sb.write("(")
 		var current = self
 		var first = true
 
 		while current.type() == pairType {
-			if not first { out = out + " " }
-			out = out + current.car.toString()
+			if not first { sb.write(" ") }
+			sb.write(current.car.toString())
 			first = false
 			current = current.cdr
 		}
@@ -85,10 +101,13 @@ let pairvt = {
 		// current is now the tail: NIL (proper list) or some other
 		// atom (improper / dotted list) -- print the dot if so
 		if current.type() != nilType {
-			out = out + " . " + current.toString()
+			sb.write(" . ")
+			sb.write(current.toString())
 		}
+		
+		sb.write(")")
 
-		ret out + ")"
+		ret sb.build()
 	}
 }
 
@@ -117,6 +136,7 @@ let isProperList = fun v {
 	}
 	ret current.type() == nilType
 }
+
 
 
 
@@ -184,6 +204,10 @@ let arrayToList = fun arr, tail {
 	ret result
 }
 
+
+
+
+
 // Walks a Pair chain back into a Vida array. Errors on a genuine
 // dotted pair, since arrays have no way to represent an improper tail.
 let listToArray = fun lst {
@@ -223,6 +247,10 @@ let nth = fun lst, n {
 	ret pairCar(current)
 }
 
+
+
+
+
 // drop(lst, n) -- the tail of a Pair chain after dropping n elements (n
 // applications of cdr). Replaces code[n..] array slicing.
 let drop = fun lst, n {
@@ -244,15 +272,20 @@ let dictvt = {
 	type = fun self -> dictType
 
 	toString = fun self {
-		var out = "dict["
+		var sb = builders::new(strType)
+		sb.write("dict[")
 		var ks = self.keys()
 		var first = true
 		for _, k in ks {
-			if not first { out = out + ", " }
-			out = out + `"` + k + `": ` + self[k].toString()
+			if not first { sb.write(", ") }
+			sb.write(`"`)
+			sb.write(k)
+			sb.write(`": `)
+			sb.write(self[k].toString())
 			first = false
 		}
-		ret out + "]"
+		sb.write("]")
+		ret sb.build()
 	}
 }
 
@@ -962,6 +995,7 @@ prelude["make-symbol"] = fun args... {
 
 
 
+
 prelude["string->symbol"] = fun args... {
 	ret prelude["make-symbol"](...args)
 }
@@ -1558,5 +1592,5 @@ let repl = fun prompt {
 
 
 
-// Everything starts here!
+// Entry point
 repl(prompt)
