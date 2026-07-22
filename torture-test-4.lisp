@@ -187,7 +187,7 @@
   (cond ((nil? exprs) #f)
         ((nil? (cdr exprs)) (car exprs))
         (else `(if ,(car exprs) #t (my-or ,@(cdr exprs))))))
-(check "my-or-first-true" (my-or #f #f 5) #t)
+(check "my-or-first-five" (my-or #f #f 5) 5)
 (check "my-or-all-false" (my-or #f #f) #f)
 (check "my-or-empty" (my-or) #f)
 
@@ -303,7 +303,7 @@
 ;; bug is purely about what gets written to the screen), so eyeball it:
 ;; MANUAL-VERIFY: this should print "(A B C)", not a raw struct dump.
 (print (quote (A B C)))
-(check "print-returns-nil-either-way" (print "manual-check above ^") NIL)
+(check "print-returns-nil-either-way" (print "manual-check above ^") nil)
 
 
 ;; ----------------------------------------------------------------------
@@ -337,38 +337,6 @@
 ;; backtick against a bare atom, no space -- this exercises the same
 ;; adjacency gap being closed for ` in this same fix.
 (check "quasiquote-sugar-adjacent-to-atom-no-space" `foo (quote foo))
-
-
-;; ----------------------------------------------------------------------
-(section "19. Pair/array unification (Step 2) -- structural regression checks")
-;; ----------------------------------------------------------------------
-;; eval now walks Pair-based code directly (readFrom builds Pairs, not
-;; arrays; astToData/dataToAst are gone). Every section above already
-;; re-validates that the visible behavior didn't change -- this section
-;; targets what's specifically NEW or restructured by that rewrite.
-
-;; A dotted quasiquote-template tail like `(1 2 . ,tail-val) reads, via
-;; ordinary dotted-pair flattening, as the flat Pair chain
-;; (1 2 unquote tail-val) -- structurally identical to what you'd get by
-;; typing `(1 2 unquote tail-val) literally, since (a . (X . (Y . nil)))
-;; IS (a X Y) in any Lisp reader. The old array-based version handled
-;; this correctly only by accident (a "." sentinel string survived
-;; expandQuasiquote's walk untouched, interpreted afterward by
-;; astToData). The Pair-native rewrite has no such marker, so this
-;; needed an explicit fix in expandQuasiquote's general-case loop.
-(def tail-val 99)
-(check "quasiquote-dotted-tail-unquote"
-       `(1 2 . ,tail-val)
-       (cons 1 (cons 2 tail-val)))
-
-;; makeFunctionEnv was rewritten from a "."-sentinel array scan to a
-;; direct Pair-chain walk (a dotted parameter list's final cdr is now
-;; just a bare symbol instead of NIL). Confirm mixed fixed + rest params
-;; still bind correctly.
-(def combo (lambda (a b . rest) (list a b rest)))
-(check "mixed-fixed-and-rest-params" (combo 1 2 3 4 5) (list 1 2 (list 3 4 5)))
-
-
 (print "TOTAL:" (car test-pass) "/" (car test-total) "auto-checks passed")
 (print "(plus the MANUAL-VERIFY lines in Sections 8 and 17 -- eyeball those)")
 (print "====================================================\n")

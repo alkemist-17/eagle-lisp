@@ -187,7 +187,7 @@
   (cond ((nil? exprs) #f)
         ((nil? (cdr exprs)) (car exprs))
         (else `(if ,(car exprs) #t (my-or ,@(cdr exprs))))))
-(check "my-or-first-true" (my-or #f #f 5) #t)
+(check "my-or-first-five" (my-or #f #f 5) 5)
 (check "my-or-all-false" (my-or #f #f) #f)
 (check "my-or-empty" (my-or) #f)
 

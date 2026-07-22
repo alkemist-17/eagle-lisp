@@ -1,10 +1,10 @@
 ;; Some basic code examples here ...
 
-;; (def factorial (lambda (n) (if (= n 0) 1 (* n (factorial (- n 1)))))) (factorial 5) (factorial 10)
+;; (def factorial (lambda (n) (if (eq n 0) 1 (* n (factorial (- n 1)))))) (factorial 5) (factorial 10)
 
 ;; (def fib (lambda (n) (if (<= n 1) n (+ (fib (- n 1)) (fib (- n 2)))))) (fib 10) (fib 15)
 
-;; (def classify (lambda (x) (cond ((< x 0) "Negative") ((= x 0) "Zero") (else "Positive")))) (print (classify 5))
+;; (def classify (lambda (x) (cond ((< x 0) "Negative") ((eq x 0) "Zero") (else "Positive")))) (print (classify 5))
 
 ;; (let ((x 10) (y 20)) (print "x is" x "and y is" y) (+ x y))
 
@@ -20,7 +20,7 @@
 
 ;; (def double (lambda (x) (* x 2))) (print "Doubled:" (map double my-list))
 
-;; (def is-even? (lambda (x) (= (% x 2) 0))) (print "Evens only:" (filter is-even? my-list))
+;; (def is-even? (lambda (x) (eq (% x 2) 0))) (print "Evens only:" (filter is-even? my-list))
 
 ;; (def add-three (lambda (a b c) (+ a (+ b c)))) (print "Applied:" (apply add-three (list 10 20 30)))
 

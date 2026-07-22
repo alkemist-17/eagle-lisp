@@ -33,6 +33,7 @@ let osName = os::name()
 let knownAtoms = [symbolType, nilType, strType, intType, floatType]
 let eagleLispVersion = "0.9.4"
 let prompt = " 🢜 "
+let eagleColor = "#C4FFD8"
 let eagleStyle = style::new()
 
 
@@ -1479,17 +1480,22 @@ eval = fun code, env {
 			ret error("file '%v' does not exist".fmt(path))
 		}
 		
-		var asts = parse(sourceCode)
+		var asts = parse(sourceCode.toString())
 		var res = nil
 		for _, expr in asts {
 			res = eval(expr, env)
 		}
+		
+		if res.isNil() {
+			ret NIL
+		}
+
 		ret res
 	}
 
 
 	else if symName(pairCar(code)) == "env" {
-		ret showEnv(env) // just for debugging
+		ret showEnv(env) // A temporary function just for debugging
 	}
 
 
@@ -1548,7 +1554,6 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	var eagleColor = "#55B273"
 	var space = "\n\n" +" ".repeat(26)
 	var header = space + "\n   Welcome to the REPL!   \n   Eagle %v".fmt(eagleLispVersion)
 	header = header + " ".repeat(12)
