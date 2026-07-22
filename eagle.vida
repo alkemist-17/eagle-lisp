@@ -385,12 +385,8 @@ let atom = fun token {
 	if token == "nil" { ret NIL }
 
 	if token.hasPrefix(`"`) and token.hasSuffix(`"`) {
-		// This is just a temporal workaround and it will fixed soon.
-		ret token[1..-1]
-			.replace(`\n`, "\n", -1)
-			.replace(`\r`, "\r", -1)
-			.replace(`\t`, "\t", -1)
-			.replace(`\v`, "\v", -1)
+		// The string needs to be interpreted again.
+		ret text::toInterpreted(token[1..-1])
 	}
 	if token == "#f" {
 		ret false
@@ -1518,7 +1514,7 @@ eval = fun code, env {
 // The REPL
 let repl = fun prompt {
 	clearScreen()
-	var eagleColor = "#FFADAD"
+	var eagleColor = "#55B273"
 	var space = "\n\n" +" ".repeat(26)
 	var header = space + "\n   Welcome to the REPL!   \n   Eagle %v".fmt(eagleLispVersion)
 	header = header + " ".repeat(12)
